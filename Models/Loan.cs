@@ -18,11 +18,15 @@ public class Loan
     [Required]
     public DateTime DueDate { get; set; }
 
+    public DateTime? ClosedDate { get; set; }
+
     [Required]
     public decimal InterestRate { get; set; }
 
     [Required]
     public decimal Amount { get; set; }
+
+    public decimal InterestReceived { get; set; }
 
     [Required]
     [StringLength(50)]

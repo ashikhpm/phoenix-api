@@ -70,8 +70,8 @@ public class UserDbContext : DbContext
         {
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
-            entity.Property(e => e.Date).IsRequired();
-            entity.Property(e => e.Time).IsRequired();
+            entity.Property(e => e.Date).IsRequired().HasColumnType("timestamp with time zone");
+            entity.Property(e => e.Time).IsRequired().HasColumnType("timestamp with time zone");
             entity.Property(e => e.Description).HasMaxLength(200);
             entity.Property(e => e.Location).HasMaxLength(100);
         });
@@ -84,7 +84,7 @@ public class UserDbContext : DbContext
             entity.Property(e => e.UserId).IsRequired();
             entity.Property(e => e.MeetingId).IsRequired();
             entity.Property(e => e.IsPresent).IsRequired();
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             
             // Foreign key relationships
             entity.HasOne(e => e.User)
@@ -110,7 +110,7 @@ public class UserDbContext : DbContext
             entity.Property(e => e.MeetingId).IsRequired();
             entity.Property(e => e.MainPayment).HasColumnType("decimal(18,2)");
             entity.Property(e => e.WeeklyPayment).HasColumnType("decimal(18,2)");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("CURRENT_TIMESTAMP");
             
             // Foreign key relationships
             entity.HasOne(e => e.User)
@@ -133,10 +133,12 @@ public class UserDbContext : DbContext
             entity.HasKey(e => e.Id);
             entity.Property(e => e.Id).ValueGeneratedOnAdd();
             entity.Property(e => e.UserId).IsRequired();
-            entity.Property(e => e.Date).IsRequired();
-            entity.Property(e => e.DueDate).IsRequired();
+            entity.Property(e => e.Date).IsRequired().HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DueDate).IsRequired().HasColumnType("timestamp with time zone");
+            entity.Property(e => e.ClosedDate).HasColumnType("timestamp with time zone");
             entity.Property(e => e.InterestRate).HasColumnType("decimal(18,2)").IsRequired();
             entity.Property(e => e.Amount).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.InterestReceived).HasColumnType("decimal(18,2)");
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
             entity.HasOne(e => e.User)
                   .WithMany()

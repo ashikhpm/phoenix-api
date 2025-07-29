@@ -299,13 +299,13 @@ public class MeetingController : ControllerBase
                 return BadRequest("Invalid time format. Please use HH:mm or HH:mm:ss format.");
             }
 
-            // Combine date and time
+            // Combine date and time and convert to UTC
             var meetingDateTime = parsedDate.Date.Add(parsedTime);
             
             var meeting = new Meeting
             {
-                Date = parsedDate.Date,
-                Time = meetingDateTime,
+                Date = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc),
+                Time = DateTime.SpecifyKind(meetingDateTime, DateTimeKind.Utc),
                 Description = meetingDto.Description,
                 Location = meetingDto.Location
             };
@@ -368,11 +368,11 @@ public class MeetingController : ControllerBase
                 return BadRequest("Invalid time format. Please use HH:mm or HH:mm:ss format.");
             }
 
-            // Combine date and time
+            // Combine date and time and convert to UTC
             var meetingDateTime = parsedDate.Date.Add(parsedTime);
             
-            existingMeeting.Date = parsedDate.Date;
-            existingMeeting.Time = meetingDateTime;
+            existingMeeting.Date = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc);
+            existingMeeting.Time = DateTime.SpecifyKind(meetingDateTime, DateTimeKind.Utc);
             existingMeeting.Description = meetingDto.Description;
             existingMeeting.Location = meetingDto.Location;
             

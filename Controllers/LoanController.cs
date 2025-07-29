@@ -28,18 +28,35 @@ public class LoanController : ControllerBase
         var loans = await _context.Loans.Include(l => l.User).ToListAsync();
         var today = DateTime.Today;
         
-        var loansWithInterest = loans.Select(l => new LoanWithInterestDto
+        var loansWithInterest = loans.Select(l => 
         {
-            Id = l.Id,
-            UserId = l.UserId,
-            UserName = l.User?.Name ?? "Unknown User",
-            Date = l.Date,
-            DueDate = l.DueDate,
-            InterestRate = l.InterestRate,
-            Amount = l.Amount,
-            Status = l.Status,
-            DaysSinceIssue = (today - l.Date.Date).Days,
-            InterestAmount = CalculateInterest(l.InterestRate, l.Amount, l.Date, today)
+            var isOverdue = false;
+            var daysOverdue = 0;
+            
+            // Only check for overdue if status is not "closed"
+            if (!string.Equals(l.Status, "closed", StringComparison.OrdinalIgnoreCase))
+            {
+                daysOverdue = (today - l.DueDate.Date).Days;
+                isOverdue = daysOverdue > 0;
+            }
+            
+            return new LoanWithInterestDto
+            {
+                Id = l.Id,
+                UserId = l.UserId,
+                UserName = l.User?.Name ?? "Unknown User",
+                Date = l.Date,
+                DueDate = l.DueDate,
+                ClosedDate = l.ClosedDate,
+                InterestRate = l.InterestRate,
+                Amount = l.Amount,
+                InterestReceived = l.InterestReceived,
+                Status = l.Status,
+                DaysSinceIssue = (today - l.Date.Date).Days,
+                InterestAmount = CalculateInterest(l.InterestRate, l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                IsOverdue = isOverdue,
+                DaysOverdue = daysOverdue
+            };
         }).ToList();
         
         return Ok(loansWithInterest);
@@ -55,6 +72,16 @@ public class LoanController : ControllerBase
             return NotFound();
             
         var today = DateTime.Today;
+        var isOverdue = false;
+        var daysOverdue = 0;
+        
+        // Only check for overdue if status is not "closed"
+        if (!string.Equals(loan.Status, "closed", StringComparison.OrdinalIgnoreCase))
+        {
+            daysOverdue = (today - loan.DueDate.Date).Days;
+            isOverdue = daysOverdue > 0;
+        }
+        
         var loanWithInterest = new LoanWithInterestDto
         {
             Id = loan.Id,
@@ -62,11 +89,15 @@ public class LoanController : ControllerBase
             UserName = loan.User?.Name ?? "Unknown User",
             Date = loan.Date,
             DueDate = loan.DueDate,
+            ClosedDate = loan.ClosedDate,
             InterestRate = loan.InterestRate,
             Amount = loan.Amount,
+            InterestReceived = loan.InterestReceived,
             Status = loan.Status,
             DaysSinceIssue = (today - loan.Date.Date).Days,
-            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, today)
+            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
+            IsOverdue = isOverdue,
+            DaysOverdue = daysOverdue
         };
         
         return Ok(loanWithInterest);
@@ -75,35 +106,79 @@ public class LoanController : ControllerBase
     // POST: api/loan (Admin only)
     [HttpPost]
     [Authorize(Roles = "Admin")]
-    public async Task<ActionResult<LoanWithInterestDto>> CreateLoan([FromBody] Loan loan)
+    public async Task<ActionResult<LoanWithInterestDto>> CreateLoan([FromBody] CreateLoanDto loanDto)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
         
         // Verify that the user exists
-        var user = await _context.Users.FindAsync(loan.UserId);
+        var user = await _context.Users.FindAsync(loanDto.UserId);
         if (user == null)
             return BadRequest("User not found");
+
+        // Parse and convert dates to UTC
+        if (!DateTime.TryParse(loanDto.Date, out DateTime parsedDate))
+        {
+            return BadRequest("Invalid date format. Please use yyyy-MM-dd format.");
+        }
+
+        if (!DateTime.TryParse(loanDto.DueDate, out DateTime parsedDueDate))
+        {
+            return BadRequest("Invalid due date format. Please use yyyy-MM-dd format.");
+        }
+
+        DateTime? parsedClosedDate = null;
+        if (!string.IsNullOrEmpty(loanDto.ClosedDate))
+        {
+            if (!DateTime.TryParse(loanDto.ClosedDate, out DateTime tempClosedDate))
+            {
+                return BadRequest("Invalid closed date format. Please use yyyy-MM-dd format.");
+            }
+            parsedClosedDate = DateTime.SpecifyKind(tempClosedDate.Date, DateTimeKind.Utc);
+        }
+
+        var loan = new Loan
+        {
+            UserId = loanDto.UserId,
+            Date = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc),
+            DueDate = DateTime.SpecifyKind(parsedDueDate.Date, DateTimeKind.Utc),
+            ClosedDate = parsedClosedDate,
+            InterestRate = loanDto.InterestRate,
+            Amount = loanDto.Amount,
+            Status = loanDto.Status
+        };
         
         _context.Loans.Add(loan);
         await _context.SaveChangesAsync();
         
-        // Return the created loan with user details
-        var createdLoan = await _context.Loans.Include(l => l.User).FirstOrDefaultAsync(l => l.Id == loan.Id);
         // Return the created loan with user details and calculated interest
         var today = DateTime.Today;
+        var isOverdue = false;
+        var daysOverdue = 0;
+        
+        // Only check for overdue if status is not "closed"
+        if (!string.Equals(loan.Status, "closed", StringComparison.OrdinalIgnoreCase))
+        {
+            daysOverdue = (today - loan.DueDate.Date).Days;
+            isOverdue = daysOverdue > 0;
+        }
+        
         var loanWithInterest = new LoanWithInterestDto
         {
             Id = loan.Id,
             UserId = loan.UserId,
-            UserName = loan.User?.Name ?? "Unknown User",
+            UserName = user.Name,
             Date = loan.Date,
             DueDate = loan.DueDate,
+            ClosedDate = loan.ClosedDate,
             InterestRate = loan.InterestRate,
             Amount = loan.Amount,
+            InterestReceived = loan.InterestReceived,
             Status = loan.Status,
             DaysSinceIssue = (today - loan.Date.Date).Days,
-            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, today)
+            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
+            IsOverdue = isOverdue,
+            DaysOverdue = daysOverdue
         };
         
         return CreatedAtAction(nameof(GetLoan), new { id = loan.Id }, loanWithInterest);
@@ -112,21 +187,49 @@ public class LoanController : ControllerBase
     // PUT: api/loan/{id} (Admin only)
     [HttpPut("{id}")]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> UpdateLoan(int id, [FromBody] Loan loan)
+    public async Task<IActionResult> UpdateLoan(int id, [FromBody] CreateLoanDto loanDto)
     {
-        if (id != loan.Id)
-            return BadRequest();
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
+            
         var existingLoan = await _context.Loans.FindAsync(id);
         if (existingLoan == null)
             return NotFound();
-        existingLoan.UserId = loan.UserId;
-        existingLoan.Date = loan.Date;
-        existingLoan.DueDate = loan.DueDate;
-        existingLoan.InterestRate = loan.InterestRate;
-        existingLoan.Amount = loan.Amount;
-        existingLoan.Status = loan.Status;
+
+        // Verify that the user exists
+        var user = await _context.Users.FindAsync(loanDto.UserId);
+        if (user == null)
+            return BadRequest("User not found");
+
+        // Parse and convert dates to UTC
+        if (!DateTime.TryParse(loanDto.Date, out DateTime parsedDate))
+        {
+            return BadRequest("Invalid date format. Please use yyyy-MM-dd format.");
+        }
+
+        if (!DateTime.TryParse(loanDto.DueDate, out DateTime parsedDueDate))
+        {
+            return BadRequest("Invalid due date format. Please use yyyy-MM-dd format.");
+        }
+
+        DateTime? parsedClosedDate = null;
+        if (!string.IsNullOrEmpty(loanDto.ClosedDate))
+        {
+            if (!DateTime.TryParse(loanDto.ClosedDate, out DateTime tempClosedDate))
+            {
+                return BadRequest("Invalid closed date format. Please use yyyy-MM-dd format.");
+            }
+            parsedClosedDate = DateTime.SpecifyKind(tempClosedDate.Date, DateTimeKind.Utc);
+        }
+
+        existingLoan.UserId = loanDto.UserId;
+        existingLoan.Date = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc);
+        existingLoan.DueDate = DateTime.SpecifyKind(parsedDueDate.Date, DateTimeKind.Utc);
+        existingLoan.ClosedDate = parsedClosedDate;
+        existingLoan.InterestRate = loanDto.InterestRate;
+        existingLoan.Amount = loanDto.Amount;
+        existingLoan.Status = loanDto.Status;
+        
         await _context.SaveChangesAsync();
         return Ok(existingLoan);
     }
@@ -143,6 +246,76 @@ public class LoanController : ControllerBase
         await _context.SaveChangesAsync();
         return NoContent();
     }
+
+    // POST: api/loan/repayment (Admin only)
+    [HttpPost("repayment")]
+    [Authorize(Roles = "Admin")]
+    public async Task<ActionResult<LoanWithInterestDto>> LoanRepayment([FromBody] LoanRepaymentDto repaymentDto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        // Verify that the loan exists
+        var loan = await _context.Loans.Include(l => l.User).FirstOrDefaultAsync(l => l.Id == repaymentDto.LoanId);
+        if (loan == null)
+            return BadRequest("Loan not found");
+
+        // Verify that the user exists and matches the loan
+        var user = await _context.Users.FindAsync(repaymentDto.UserId);
+        if (user == null)
+            return BadRequest("User not found");
+
+        if (loan.UserId != repaymentDto.UserId)
+            return BadRequest("User ID does not match the loan");
+
+        // Parse the closed date
+        if (!DateTime.TryParse(repaymentDto.ClosedDate, out DateTime parsedClosedDate))
+        {
+            return BadRequest("Invalid closed date format. Please use yyyy-MM-dd format.");
+        }
+
+        // Update the loan with repayment information
+        loan.ClosedDate = DateTime.SpecifyKind(parsedClosedDate.Date, DateTimeKind.Utc);
+        loan.Status = "closed";
+        loan.Amount = repaymentDto.LoanAmount;
+        loan.InterestReceived = repaymentDto.InterestAmount;
+        
+        await _context.SaveChangesAsync();
+
+        // Return the updated loan with calculated interest
+        var today = DateTime.Today;
+        var isOverdue = false;
+        var daysOverdue = 0;
+        
+        // Only check for overdue if status is not "closed" (but it is closed now, so this will be false)
+        if (!string.Equals(loan.Status, "closed", StringComparison.OrdinalIgnoreCase))
+        {
+            daysOverdue = (today - loan.DueDate.Date).Days;
+            isOverdue = daysOverdue > 0;
+        }
+        
+        var loanWithInterest = new LoanWithInterestDto
+        {
+            Id = loan.Id,
+            UserId = loan.UserId,
+            UserName = loan.User?.Name ?? "Unknown User",
+            Date = loan.Date,
+            DueDate = loan.DueDate,
+            ClosedDate = loan.ClosedDate,
+            InterestRate = loan.InterestRate,
+            Amount = loan.Amount,
+            Status = loan.Status,
+            DaysSinceIssue = (today - loan.Date.Date).Days,
+            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
+            IsOverdue = isOverdue,
+            DaysOverdue = daysOverdue
+        };
+        
+        _logger.LogInformation("Loan repayment processed for Loan ID: {LoanId}, User ID: {UserId}, Amount: {Amount}, Interest: {Interest}", 
+            repaymentDto.LoanId, repaymentDto.UserId, repaymentDto.LoanAmount, repaymentDto.InterestAmount);
+        
+        return Ok(loanWithInterest);
+    }
     
     /// <summary>
     /// Calculates interest amount based on monthly rate and days since loan issue
@@ -150,14 +323,14 @@ public class LoanController : ControllerBase
     /// <param name="monthlyRate">Monthly interest rate as percentage</param>
     /// <param name="principal">Loan principal amount</param>
     /// <param name="loanDate">Date when loan was issued</param>
-    /// <param name="calculationDate">Date to calculate interest until</param>
+    /// <param name="endDate">Date to calculate interest until (ClosedDate if available, otherwise DueDate)</param>
     /// <returns>Interest amount</returns>
-    private decimal CalculateInterest(decimal monthlyRate, decimal principal, DateTime loanDate, DateTime calculationDate)
+    private decimal CalculateInterest(decimal monthlyRate, decimal principal, DateTime loanDate, DateTime endDate)
     {
-        if (calculationDate <= loanDate)
+        if (endDate <= loanDate)
             return 0;
             
-        var daysSinceIssue = (calculationDate - loanDate).Days;
+        var daysSinceIssue = (endDate - loanDate).Days;
         var monthsSinceIssue = daysSinceIssue / 30.0; // Convert days to months
         
         // Calculate interest: Principal * (Monthly Rate / 100) * Number of Months

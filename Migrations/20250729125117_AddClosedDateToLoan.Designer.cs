@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using phoenix_sangam_api.Data;
@@ -11,9 +12,11 @@ using phoenix_sangam_api.Data;
 namespace phoenix_sangam_api.Migrations
 {
     [DbContext(typeof(UserDbContext))]
-    partial class UserDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250729125117_AddClosedDateToLoan")]
+    partial class AddClosedDateToLoan
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -75,9 +78,6 @@ namespace phoenix_sangam_api.Migrations
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("InterestRate")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<decimal>("InterestReceived")
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<string>("Status")

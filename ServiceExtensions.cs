@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
 using phoenix_sangam_api.Configuration;
+using System;
 
 namespace phoenix_sangam_api.Extensions;
 
@@ -12,6 +13,9 @@ public static class ServiceExtensions
         configuration.GetSection("Database").Bind(databaseConfig);
         
         services.Configure<DatabaseConfig>(configuration.GetSection("Database"));
+        
+        // Enable legacy timestamp behavior for PostgreSQL
+        AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
         
         services.AddDbContext<UserDbContext>(options =>
         {
