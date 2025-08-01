@@ -22,6 +22,9 @@ public class CreateLoanDto
     public decimal Amount { get; set; }
 
     [Required]
+    public int LoanTerm { get; set; } // Loan term in months
+
+    [Required]
     [StringLength(50)]
     public string Status { get; set; } = string.Empty;
 }
@@ -38,12 +41,14 @@ public class LoanWithInterestDto
     public string LoanTypeName { get; set; } = string.Empty;
     public double InterestRate { get; set; }
     public decimal Amount { get; set; }
+    public int LoanTerm { get; set; }
     public decimal InterestReceived { get; set; }
     public string Status { get; set; } = string.Empty;
     public int DaysSinceIssue { get; set; }
     public decimal InterestAmount { get; set; }
     public bool IsOverdue { get; set; }
     public int DaysOverdue { get; set; }
+    public int DaysUntilDue { get; set; }
 }
 
 public class LoanRepaymentDto
@@ -70,6 +75,9 @@ public class CreateLoanRequestDto
     public decimal Amount { get; set; }
     
     [Required]
+    public int LoanTerm { get; set; } // Loan term in months
+    
+    [Required]
     public int LoanTypeId { get; set; }
     
     [Required]
@@ -87,6 +95,7 @@ public class LoanRequestResponseDto
     public string LoanTypeName { get; set; } = string.Empty;
     public double InterestRate { get; set; }
     public decimal Amount { get; set; }
+    public int LoanTerm { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime RequestDate { get; set; }
     public DateTime? ProcessedDate { get; set; }

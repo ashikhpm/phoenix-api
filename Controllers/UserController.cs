@@ -29,18 +29,35 @@ public class UserController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all users (Secretary only)
+    /// Gets all users (Secretary only) - excludes Secretary role users from the list
     /// </summary>
-    /// <returns>List of all users</returns>
+    /// <returns>List of all users excluding Secretary role</returns>
     [HttpGet]
-    [Authorize(Roles = "Secretary")]
+    [Authorize]
     public async Task<ActionResult<IEnumerable<User>>> GetAllUsers()
     {
         try
         {
-            _logger.LogInformation("Getting all users");
-            var users = await _context.Users.ToListAsync();
-            _logger.LogInformation("Retrieved {Count} users", users.Count);
+            _logger.LogInformation("Getting all users (excluding Secretary role)");
+            var users = await _context.Users
+                .Where(u => u.UserRoleId != 1) // Exclude Secretary role (ID = 1)
+                .Select(u => new User
+                {
+                    Id = u.Id,
+                    Name = u.Name,
+                    Address = u.Address,
+                    Email = u.Email,
+                    Phone = u.Phone,
+                    UserRoleId = u.UserRoleId,
+                    UserRole = new UserRole
+                    {
+                        Id = u.UserRole.Id,
+                        Name = u.UserRole.Name,
+                        Description = u.UserRole.Description
+                    }
+                })
+                .ToListAsync();
+            _logger.LogInformation("Retrieved {Count} users (excluding Secretary)", users.Count);
             return Ok(users);
         }
         catch (Exception ex)

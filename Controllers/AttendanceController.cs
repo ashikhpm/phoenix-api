@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
+using phoenix_sangam_api.DTOs;
 using phoenix_sangam_api.Models;
 
 namespace phoenix_sangam_api.Controllers;

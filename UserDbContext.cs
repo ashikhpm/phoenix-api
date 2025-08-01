@@ -194,15 +194,15 @@ public class UserDbContext : DbContext
             new UserRole { Id = 2, Name = "Member", Description = "Regular member with limited access" }
         );
         modelBuilder.Entity<User>().HasData(
-            new User { Id = 1, Name = "John Doe", Address = "123 Main St", Email = "john@example.com", Phone = "555-0101", UserRoleId = 1 },
-            new User { Id = 2, Name = "Jane Smith", Address = "456 Oak Ave", Email = "jane@example.com", Phone = "555-0102", UserRoleId = 2 }
+            new User { Id = 1, Name = "Secretary", Address = "Pattanikoop", Email = "secretary@phenix.com", Phone = "8089011871", UserRoleId = 1 }
+            
         );
         modelBuilder.Entity<UserLogin>().HasData(
-            new UserLogin { Id = 1, Username = "john@example.com", Password = "password1", UserId = 1 },
-            new UserLogin { Id = 2, Username = "jane@example.com", Password = "password1", UserId = 2 }
+            new UserLogin { Id = 1, Username = "secretary@phenix.com", Password = "password1", UserId = 1 }
+            
         );
         modelBuilder.Entity<LoanType>().HasData(
-            new LoanType { Id = 1, LoanTypeName = "Marriage Loan", InterestRate = 1.5 },
+            new LoanType { Id = 1, LoanTypeName = "Marriage Loan", InterestRate = 1.16 },
             new LoanType { Id = 2, LoanTypeName = "Personal Loan", InterestRate = 2.5 }
         );
     }

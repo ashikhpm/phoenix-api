@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
+using phoenix_sangam_api.DTOs;
 using phoenix_sangam_api.Models;
 
 namespace phoenix_sangam_api.Controllers;
@@ -211,9 +212,9 @@ public class MeetingController : ControllerBase
                 Location = meeting.Location,
                 TotalMainPayment = totalMainPayment,
                 TotalWeeklyPayment = totalWeeklyPayment,
-                PresentAttendanceCount = presentAttendanceCount,
-                TotalAttendanceCount = totalAttendanceCount,
-                AttendancePercentage = totalAttendanceCount > 0 ? (double)presentAttendanceCount / totalAttendanceCount * 100 : 0
+                PresentAttendees = presentAttendanceCount,
+                TotalAttendees = totalAttendanceCount,
+                AbsentAttendees = totalAttendanceCount - presentAttendanceCount
             };
             
             _logger.LogInformation("Successfully retrieved meeting summary with ID: {Id}. " +
@@ -255,10 +256,9 @@ public class MeetingController : ControllerBase
                 Location = m.Location,
                 TotalMainPayment = m.MeetingPayments.Sum(p => p.MainPayment),
                 TotalWeeklyPayment = m.MeetingPayments.Sum(p => p.WeeklyPayment),
-                PresentAttendanceCount = m.Attendances.Count(a => a.IsPresent),
-                TotalAttendanceCount = m.Attendances.Count,
-                AttendancePercentage = m.Attendances.Count > 0 ? 
-                    (double)m.Attendances.Count(a => a.IsPresent) / m.Attendances.Count * 100 : 0
+                PresentAttendees = m.Attendances.Count(a => a.IsPresent),
+                TotalAttendees = m.Attendances.Count,
+                AbsentAttendees = m.Attendances.Count - m.Attendances.Count(a => a.IsPresent)
             }).ToList();
             
             _logger.LogInformation("Retrieved {Count} meeting summaries", responseDtos.Count);
@@ -278,7 +278,7 @@ public class MeetingController : ControllerBase
     /// <returns>The created meeting with assigned ID</returns>
     [HttpPost]
     [Authorize(Roles = "Secretary")]
-    public async Task<ActionResult<MeetingResponseDto>> CreateMeeting([FromBody] CreateMeetingDto meetingDto)
+    public async Task<ActionResult<MeetingResponseDto>> CreateMeeting([FromBody] Models.CreateMeetingDto meetingDto)
     {
         try
         {
@@ -341,7 +341,7 @@ public class MeetingController : ControllerBase
     /// <returns>The updated meeting</returns>
     [HttpPut("{id}")]
     [Authorize(Roles = "Secretary")]
-    public async Task<ActionResult<MeetingResponseDto>> UpdateMeeting(int id, [FromBody] UpdateMeetingDto meetingDto)
+    public async Task<ActionResult<MeetingResponseDto>> UpdateMeeting(int id, [FromBody] Models.UpdateMeetingDto meetingDto)
     {
         try
         {

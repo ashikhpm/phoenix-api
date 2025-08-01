@@ -2,6 +2,9 @@ using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
 using phoenix_sangam_api.Configuration;
 using phoenix_sangam_api.Extensions;
+using phoenix_sangam_api.Services;
+using phoenix_sangam_api.Middleware;
+using phoenix_sangam_api.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
@@ -9,7 +12,6 @@ using System.Text;
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -43,6 +45,17 @@ builder.Services.AddSwaggerGen(options =>
 
 // Add generic database support
 builder.Services.AddGenericDatabase(builder.Configuration);
+
+// Register services
+builder.Services.AddScoped<ILoanService, LoanService>();
+builder.Services.AddScoped<IValidationService, ValidationService>();
+builder.Services.AddScoped<ICacheService, MemoryCacheService>();
+
+// Register repositories
+builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
+// Add memory cache
+builder.Services.AddMemoryCache();
 
 // Add CORS policy for localhost:3000
 builder.Services.AddCors(options =>
@@ -86,6 +99,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Add custom middleware
+app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors("AllowLocal3000");
 

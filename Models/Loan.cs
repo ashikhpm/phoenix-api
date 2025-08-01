@@ -28,6 +28,9 @@ public class Loan
     [Required]
     public decimal Amount { get; set; }
 
+    [Required]
+    public int LoanTerm { get; set; } // Loan term in months
+
     public decimal InterestReceived { get; set; }
 
     [Required]

@@ -77,6 +77,9 @@ namespace phoenix_sangam_api.Migrations
                     b.Property<decimal>("InterestReceived")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<int>("LoanTerm")
+                        .HasColumnType("integer");
+
                     b.Property<int>("LoanTypeId")
                         .HasColumnType("integer");
 
@@ -113,6 +116,9 @@ namespace phoenix_sangam_api.Migrations
 
                     b.Property<DateTime>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LoanTerm")
+                        .HasColumnType("integer");
 
                     b.Property<int>("LoanTypeId")
                         .HasColumnType("integer");
@@ -169,7 +175,7 @@ namespace phoenix_sangam_api.Migrations
                         new
                         {
                             Id = 1,
-                            InterestRate = 1.5,
+                            InterestRate = 1.1599999999999999,
                             LoanTypeName = "Marriage Loan"
                         },
                         new
@@ -286,20 +292,11 @@ namespace phoenix_sangam_api.Migrations
                         new
                         {
                             Id = 1,
-                            Address = "123 Main St",
-                            Email = "john@example.com",
-                            Name = "John Doe",
-                            Phone = "555-0101",
+                            Address = "Pattanikoop",
+                            Email = "secretary@phenix.com",
+                            Name = "Secretary",
+                            Phone = "8089011871",
                             UserRoleId = 1
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Address = "456 Oak Ave",
-                            Email = "jane@example.com",
-                            Name = "Jane Smith",
-                            Phone = "555-0102",
-                            UserRoleId = 2
                         });
                 });
 
@@ -339,14 +336,7 @@ namespace phoenix_sangam_api.Migrations
                             Id = 1,
                             Password = "password1",
                             UserId = 1,
-                            Username = "john@example.com"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Password = "password1",
-                            UserId = 2,
-                            Username = "jane@example.com"
+                            Username = "secretary@phenix.com"
                         });
                 });
 

@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
 using phoenix_sangam_api.Models;
+using System.Security.Claims;
 
 namespace phoenix_sangam_api.Controllers;
 
@@ -20,48 +21,97 @@ public class LoanController : ControllerBase
         _logger = logger;
     }
 
-    // GET: api/loan (Admin only)
+    // GET: api/loan (Accessible to both Members and Secretary)
     [HttpGet]
-    [Authorize(Roles = "Secretary")]
+    [Authorize]
     public async Task<ActionResult<IEnumerable<LoanWithInterestDto>>> GetAllLoans()
     {
-        var loans = await _context.Loans.Include(l => l.User).Include(l => l.LoanType).ToListAsync();
-        var today = DateTime.Today;
-        
-        var loansWithInterest = loans.Select(l => 
+        try
         {
-            var isOverdue = false;
-            var daysOverdue = 0;
+            _logger.LogInformation("Getting loans list");
             
-            // Only check for overdue if status is not "closed"
-            if (!string.Equals(l.Status, "closed", StringComparison.OrdinalIgnoreCase))
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
             {
-                daysOverdue = (today - l.DueDate.Date).Days;
-                isOverdue = daysOverdue > 0;
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
             }
+
+            // Get the current user to check their role
+            var currentUser = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
             
-            return new LoanWithInterestDto
+            if (currentUser == null)
             {
-                Id = l.Id,
-                UserId = l.UserId,
-                UserName = l.User?.Name ?? "Unknown User",
-                Date = l.Date,
-                DueDate = l.DueDate,
-                ClosedDate = l.ClosedDate,
-                LoanTypeId = l.LoanTypeId,
-                LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
-                InterestRate = l.LoanType?.InterestRate ?? 0,
-                Amount = l.Amount,
-                InterestReceived = l.InterestReceived,
-                Status = l.Status,
-                DaysSinceIssue = (today - l.Date.Date).Days,
-                InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
-                IsOverdue = isOverdue,
-                DaysOverdue = daysOverdue
-            };
-        }).ToList();
-        
-        return Ok(loansWithInterest);
+                _logger.LogWarning("Current user not found");
+                return BadRequest("Current user not found");
+            }
+
+            var today = DateTime.Today;
+            IQueryable<Loan> loansQuery;
+
+            // If user is secretary, return all loans; otherwise, return only user's loans
+            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Secretary user - returning all loans");
+                loansQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType);
+            }
+            else
+            {
+                _logger.LogInformation("Regular user - returning only user's loans. User ID: {UserId}", currentUserId);
+                loansQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == currentUserId);
+            }
+
+            var loans = await loansQuery.ToListAsync();
+            
+            var loansWithInterest = loans.Select(l => 
+            {
+                var isOverdue = false;
+                var daysOverdue = 0;
+                var daysUntilDue = 0;
+                
+                // Only check for overdue if status is not "closed"
+                if (!string.Equals(l.Status, "closed", StringComparison.OrdinalIgnoreCase))
+                {
+                    daysOverdue = (today - l.DueDate.Date).Days;
+                    isOverdue = daysOverdue > 0;
+                    daysUntilDue = l.DueDate.Date >= today ? (l.DueDate.Date - today).Days : 0;
+                }
+                
+                return new LoanWithInterestDto
+                {
+                    Id = l.Id,
+                    UserId = l.UserId,
+                    UserName = l.User?.Name ?? "Unknown User",
+                    Date = l.Date,
+                    DueDate = l.DueDate,
+                    ClosedDate = l.ClosedDate,
+                    LoanTypeId = l.LoanTypeId,
+                    LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                    InterestRate = l.LoanType?.InterestRate ?? 0,
+                    Amount = l.Amount,
+                    LoanTerm = l.LoanTerm,
+                    InterestReceived = l.InterestReceived,
+                    Status = l.Status,
+                    DaysSinceIssue = (today - l.Date.Date).Days,
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                    IsOverdue = isOverdue,
+                    DaysOverdue = daysOverdue,
+                    DaysUntilDue = daysUntilDue
+                };
+            }).ToList();
+            
+            _logger.LogInformation("Retrieved {Count} loans for user {UserId}", loansWithInterest.Count, currentUserId);
+            
+            return Ok(loansWithInterest);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving loans list");
+            return StatusCode(500, "An error occurred while retrieving loans list");
+        }
     }
 
     // GET: api/loan/{id} (Admin only)
@@ -76,12 +126,14 @@ public class LoanController : ControllerBase
         var today = DateTime.Today;
         var isOverdue = false;
         var daysOverdue = 0;
+        var daysUntilDue = 0;
         
         // Only check for overdue if status is not "closed"
         if (!string.Equals(loan.Status, "closed", StringComparison.OrdinalIgnoreCase))
         {
             daysOverdue = (today - loan.DueDate.Date).Days;
             isOverdue = daysOverdue > 0;
+            daysUntilDue = loan.DueDate.Date >= today ? (loan.DueDate.Date - today).Days : 0;
         }
         
         var loanWithInterest = new LoanWithInterestDto
@@ -96,12 +148,14 @@ public class LoanController : ControllerBase
             LoanTypeName = loan.LoanType?.LoanTypeName ?? "Unknown",
             InterestRate = loan.LoanType?.InterestRate ?? 0,
             Amount = loan.Amount,
+            LoanTerm = loan.LoanTerm,
             InterestReceived = loan.InterestReceived,
             Status = loan.Status,
             DaysSinceIssue = (today - loan.Date.Date).Days,
             InterestAmount = CalculateInterest((decimal)(loan.LoanType?.InterestRate ?? 0), loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
             IsOverdue = isOverdue,
-            DaysOverdue = daysOverdue
+            DaysOverdue = daysOverdue,
+            DaysUntilDue = daysUntilDue
         };
         
         return Ok(loanWithInterest);

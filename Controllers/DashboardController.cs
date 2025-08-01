@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
+using phoenix_sangam_api.DTOs;
 using phoenix_sangam_api.Models;
 using System.Security.Claims;
+using phoenix_sangam_api;
 
 namespace phoenix_sangam_api.Controllers;
 
@@ -100,40 +102,69 @@ public class DashboardController : ControllerBase
                 .ToList();
 
             // Transform to response DTOs
-            var meetingDetails = meetings.Select(m => new MeetingDetailsDto
+            var meetingDetails = meetings.Select(m => new MeetingWithDetailsResponseDto
             {
                 Id = m.Id,
                 Date = m.Date,
                 Time = m.Time,
                 Description = m.Description,
                 Location = m.Location,
-                AttendedUsersCount = m.Attendances.Count(a => a.IsPresent),
-                TotalMainPayment = m.MeetingPayments.Where(p => m.Attendances.Any(a => a.UserId == p.UserId && a.IsPresent)).Sum(p => p.MainPayment),
-                TotalWeeklyPayment = m.MeetingPayments.Where(p => m.Attendances.Any(a => a.UserId == p.UserId && a.IsPresent)).Sum(p => p.WeeklyPayment),
-                TotalAttendanceCount = m.Attendances.Count,
-                AttendancePercentage = m.Attendances.Count > 0 ? 
-                    (double)m.Attendances.Count(a => a.IsPresent) / m.Attendances.Count * 100 : 0
+                TotalMainPayment = m.MeetingPayments.Sum(p => p.MainPayment),
+                TotalWeeklyPayment = m.MeetingPayments.Sum(p => p.WeeklyPayment),
+                TotalAttendees = m.Attendances.Count,
+                PresentAttendees = m.Attendances.Count(a => a.IsPresent),
+                AbsentAttendees = m.Attendances.Count(a => !a.IsPresent),
+                Attendances = m.Attendances.Select(a => new AttendanceResponseDto
+                {
+                    Id = a.Id,
+                    UserId = a.UserId,
+                    MeetingId = a.MeetingId,
+                    IsPresent = a.IsPresent,
+                    CreatedAt = a.CreatedAt,
+                    User = a.User != null ? new UserResponseDto
+                    {
+                        Id = a.User.Id,
+                        Name = a.User.Name,
+                        Address = a.User.Address,
+                        Email = a.User.Email,
+                        Phone = a.User.Phone
+                    } : null,
+                    Meeting = null // Avoid circular reference
+                }).ToList(),
+                MeetingPayments = m.MeetingPayments.Select(p => new MeetingPaymentResponseDto
+                {
+                    Id = p.Id,
+                    UserId = p.UserId,
+                    MeetingId = p.MeetingId,
+                    MainPayment = p.MainPayment,
+                    WeeklyPayment = p.WeeklyPayment,
+                    CreatedAt = p.CreatedAt,
+                    User = p.User != null ? new UserResponseDto
+                    {
+                        Id = p.User.Id,
+                        Name = p.User.Name,
+                        Address = p.User.Address,
+                        Email = p.User.Email,
+                        Phone = p.User.Phone
+                    } : null,
+                    Meeting = null // Avoid circular reference
+                }).ToList()
             }).ToList();
 
             var totalCount = allFilteredMeetings.Count;
             var response = new PaginatedMeetingDetailsResponse
             {
                 Meetings = meetingDetails,
-                Pagination = new PaginationInfo
-                {
-                    Page = page,
-                    PageSize = pageSize,
-                    TotalCount = totalCount,
-                    TotalPages = (int)Math.Ceiling((double)totalCount / pageSize),
-                    HasNextPage = page < (int)Math.Ceiling((double)totalCount / pageSize),
-                    HasPreviousPage = page > 1
-                },
+                TotalCount = totalCount,
+                PageNumber = page,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling((double)totalCount / pageSize),
                 TotalMainPaymentAllEntries = totalMainPaymentAllEntries,
                 TotalWeeklyPaymentAllEntries = totalWeeklyPaymentAllEntries
             };
 
             _logger.LogInformation("Successfully retrieved {Count} meeting details. Total: {TotalCount}, Page: {Page}/{TotalPages}", 
-                meetingDetails.Count, totalCount, page, response.Pagination.TotalPages);
+                meetingDetails.Count, totalCount, page, response.TotalPages);
 
             return Ok(response);
         }
@@ -207,22 +238,55 @@ public class DashboardController : ControllerBase
                 TotalMeetings = meetings.Count,
                 TotalMainPayment = meetings.Sum(m => m.MeetingPayments.Sum(p => p.MainPayment)),
                 TotalWeeklyPayment = meetings.Sum(m => m.MeetingPayments.Sum(p => p.WeeklyPayment)),
-                TotalAttendedUsers = meetings.Sum(m => m.Attendances.Count(a => a.IsPresent)),
-                TotalAttendanceRecords = meetings.Sum(m => m.Attendances.Count),
-                AverageAttendancePercentage = meetings.Count > 0 ? 
-                    meetings.Average(m => m.Attendances.Count > 0 ? 
-                        (double)m.Attendances.Count(a => a.IsPresent) / m.Attendances.Count * 100 : 0) : 0,
-                DateRange = new DateRangeDto
+                TotalUsers = await _context.Users.Where(u => u.UserRoleId != 1).CountAsync(), // Exclude Secretary role
+                TotalLoans = await _context.Loans.CountAsync(),
+                TotalLoanAmount = await _context.Loans.SumAsync(l => l.Amount),
+                TotalInterestAmount = await _context.Loans.SumAsync(l => l.InterestReceived),
+                OverdueLoans = await _context.Loans.CountAsync(l => l.DueDate < DateTime.Today && l.ClosedDate == null && l.Status.ToLower() != "closed"),
+                RecentMeetings = meetings.Take(5).Select(m => new MeetingSummaryResponseDto
                 {
-                    StartDate = startDateTime,
-                    EndDate = endDateTime?.Date
-                }
+                    Id = m.Id,
+                    Date = m.Date,
+                    Time = m.Time,
+                    Description = m.Description,
+                    Location = m.Location,
+                    TotalAttendees = m.Attendances.Count,
+                    PresentAttendees = m.Attendances.Count(a => a.IsPresent),
+                    AbsentAttendees = m.Attendances.Count(a => !a.IsPresent),
+                    TotalMainPayment = m.MeetingPayments.Sum(p => p.MainPayment),
+                    TotalWeeklyPayment = m.MeetingPayments.Sum(p => p.WeeklyPayment)
+                }).ToList(),
+                RecentLoans = await _context.Loans
+                    .Include(l => l.User)
+                    .Include(l => l.LoanType)
+                    .OrderByDescending(l => l.Date)
+                    .Take(5)
+                    .Select(l => new LoanWithInterestDto
+                    {
+                        Id = l.Id,
+                        UserId = l.UserId,
+                        UserName = l.User != null ? l.User.Name : string.Empty,
+                        Date = l.Date,
+                        DueDate = l.DueDate,
+                        ClosedDate = l.ClosedDate,
+                        LoanTypeId = l.LoanTypeId,
+                        LoanTypeName = l.LoanType != null ? l.LoanType.LoanTypeName : string.Empty,
+                        InterestRate = l.LoanType != null ? l.LoanType.InterestRate : 0,
+                        Amount = l.Amount,
+                        InterestReceived = l.InterestReceived,
+                        Status = l.Status,
+                        DaysSinceIssue = (int)(DateTime.Today - l.Date).TotalDays,
+                        InterestAmount = l.InterestReceived,
+                        IsOverdue = l.DueDate < DateTime.Today && l.ClosedDate == null && l.Status.ToLower() != "closed",
+                        DaysOverdue = l.DueDate < DateTime.Today && l.ClosedDate == null && l.Status.ToLower() != "closed" ? 
+                            (int)(DateTime.Today - l.DueDate).TotalDays : 0
+                    })
+                    .ToListAsync()
             };
 
             _logger.LogInformation("Successfully retrieved dashboard summary. Total Meetings: {TotalMeetings}, " +
-                "Total Main Payment: {TotalMainPayment}, Total Weekly Payment: {TotalWeeklyPayment}, " +
-                "Total Attended Users: {TotalAttendedUsers}", 
-                response.TotalMeetings, response.TotalMainPayment, response.TotalWeeklyPayment, response.TotalAttendedUsers);
+                "Total Main Payment: {TotalMainPayment}, Total Weekly Payment: {TotalWeeklyPayment}", 
+                response.TotalMeetings, response.TotalMainPayment, response.TotalWeeklyPayment);
 
             return Ok(response);
         }
@@ -284,12 +348,14 @@ public class DashboardController : ControllerBase
             {
                 var isOverdue = false;
                 var daysOverdue = 0;
+                var daysUntilDue = 0;
                 
                 // Only check for overdue if status is not "closed"
                 if (!string.Equals(l.Status, "closed", StringComparison.OrdinalIgnoreCase))
                 {
                     daysOverdue = (today - l.DueDate.Date).Days;
                     isOverdue = daysOverdue > 0;
+                    daysUntilDue = l.DueDate.Date >= today ? (l.DueDate.Date - today).Days : 0;
                 }
                 
                 return new LoanWithInterestDto
@@ -304,12 +370,14 @@ public class DashboardController : ControllerBase
                     LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
                     InterestRate = l.LoanType?.InterestRate ?? 0,
                     Amount = l.Amount,
+                    LoanTerm = l.LoanTerm,
                     InterestReceived = l.InterestReceived,
                     Status = l.Status,
                     DaysSinceIssue = (today - l.Date.Date).Days,
                     InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
                     IsOverdue = isOverdue,
-                    DaysOverdue = daysOverdue
+                    DaysOverdue = daysOverdue,
+                    DaysUntilDue = daysUntilDue
                 };
             }).ToList();
             
@@ -378,10 +446,18 @@ public class DashboardController : ControllerBase
                 .OrderBy(l => l.DueDate)
                 .ToListAsync();
             
-            // Get loans due within 2 weeks - exclude closed loans
-            var upcomingLoans = await baseQuery
-                .Where(l => l.DueDate.Date >= today && 
-                           l.DueDate.Date <= twoWeeksFromNow && 
+            // Get loans due today - exclude closed loans
+            var dueTodayLoans = await baseQuery
+                .Where(l => l.DueDate.Date == today && 
+                           l.ClosedDate == null && 
+                           l.Status.ToLower() != "closed")
+                .OrderBy(l => l.DueDate)
+                .ToListAsync();
+            
+            // Get loans due this week (next 7 days) - exclude closed loans
+            var dueThisWeekLoans = await baseQuery
+                .Where(l => l.DueDate.Date > today && 
+                           l.DueDate.Date <= today.AddDays(7) && 
                            l.ClosedDate == null && 
                            l.Status.ToLower() != "closed")
                 .OrderBy(l => l.DueDate)
@@ -389,40 +465,73 @@ public class DashboardController : ControllerBase
             
             var response = new LoanDueResponse
             {
-                OverdueLoans = overdueLoans.Select(l => new LoanDueDto
+                OverdueLoans = overdueLoans.Select(l => new LoanWithInterestDto
                 {
                     Id = l.Id,
                     UserId = l.UserId,
                     UserName = l.User?.Name ?? "Unknown User",
                     Date = l.Date,
                     DueDate = l.DueDate,
+                    ClosedDate = l.ClosedDate,
                     LoanTypeId = l.LoanTypeId,
                     LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
                     InterestRate = l.LoanType?.InterestRate ?? 0,
                     Amount = l.Amount,
+                    LoanTerm = l.LoanTerm,
+                    InterestReceived = l.InterestReceived,
                     Status = l.Status,
+                    DaysSinceIssue = (int)(DateTime.Today - l.Date).TotalDays,
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                    IsOverdue = true,
                     DaysOverdue = (today - l.DueDate.Date).Days,
-                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate)
+                    DaysUntilDue = (l.DueDate.Date - today).Days
                 }).ToList(),
-                UpcomingLoans = upcomingLoans.Select(l => new LoanDueDto
+                DueTodayLoans = dueTodayLoans.Select(l => new LoanWithInterestDto
                 {
                     Id = l.Id,
                     UserId = l.UserId,
                     UserName = l.User?.Name ?? "Unknown User",
                     Date = l.Date,
                     DueDate = l.DueDate,
+                    ClosedDate = l.ClosedDate,
                     LoanTypeId = l.LoanTypeId,
                     LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
                     InterestRate = l.LoanType?.InterestRate ?? 0,
                     Amount = l.Amount,
+                    LoanTerm = l.LoanTerm,
+                    InterestReceived = l.InterestReceived,
                     Status = l.Status,
-                    DaysUntilDue = (l.DueDate.Date - today).Days,
-                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate)
+                    DaysSinceIssue = (int)(DateTime.Today - l.Date).TotalDays,
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                    IsOverdue = false,
+                    DaysOverdue = 0,
+                    DaysUntilDue = 0
+                }).ToList(),
+                DueThisWeekLoans = dueThisWeekLoans.Select(l => new LoanWithInterestDto
+                {
+                    Id = l.Id,
+                    UserId = l.UserId,
+                    UserName = l.User?.Name ?? "Unknown User",
+                    Date = l.Date,
+                    DueDate = l.DueDate,
+                    ClosedDate = l.ClosedDate,
+                    LoanTypeId = l.LoanTypeId,
+                    LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                    InterestRate = l.LoanType?.InterestRate ?? 0,
+                    Amount = l.Amount,
+                    LoanTerm = l.LoanTerm,
+                    InterestReceived = l.InterestReceived,
+                    Status = l.Status,
+                    DaysSinceIssue = (int)(DateTime.Today - l.Date).TotalDays,
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                    IsOverdue = false,
+                    DaysOverdue = 0,
+                    DaysUntilDue = (l.DueDate.Date - today).Days
                 }).ToList()
             };
             
-            _logger.LogInformation("Retrieved {OverdueCount} overdue loans and {UpcomingCount} upcoming loans", 
-                response.OverdueLoans.Count, response.UpcomingLoans.Count);
+            _logger.LogInformation("Retrieved {OverdueCount} overdue loans, {DueTodayCount} due today, and {DueThisWeekCount} due this week", 
+                response.OverdueLoans.Count, response.DueTodayLoans.Count, response.DueThisWeekLoans.Count);
             
             return Ok(response);
         }
@@ -727,8 +836,8 @@ public class DashboardController : ControllerBase
                 return NotFound("Loan request not found");
 
             // Validate action
-            var action = actionDto.Action.ToLower();
-            if (action != "accepted" && action != "rejected")
+            var action = actionDto.Action;
+            if (action != "Accepted" && action != "Rejected")
             {
                 return BadRequest("Action must be 'accepted' or 'rejected'");
             }
@@ -746,12 +855,12 @@ public class DashboardController : ControllerBase
             loanRequest.ProcessedByUserId = adminUserId;
 
             // If accepted, create a new loan
-            if (action == "accepted")
+            if (action == "Accepted")
             {
                 var newLoan = new Loan
                 {
                     UserId = loanRequest.UserId,
-                    Date = loanRequest.Date,
+                    Date = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc),
                     DueDate = loanRequest.DueDate,
                     LoanTypeId = loanRequest.LoanTypeId,
                     Amount = loanRequest.Amount,

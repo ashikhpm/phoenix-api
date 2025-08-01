@@ -27,6 +27,9 @@ public class LoanRequest
     public decimal Amount { get; set; }
 
     [Required]
+    public int LoanTerm { get; set; } // Loan term in months
+
+    [Required]
     [StringLength(50)]
     public string Status { get; set; } = string.Empty; // Requested, Accepted, Rejected
 

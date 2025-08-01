@@ -1,0 +1,465 @@
+<?xml version="1.0"?>
+<doc>
+    <assembly>
+        <name>phoenix-sangam-api</name>
+    </assembly>
+    <members>
+        <member name="M:phoenix_sangam_api.Controllers.AttendanceController.GetAllAttendances">
+            <summary>
+            Gets all attendances
+            </summary>
+            <returns>List of all attendances</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.AttendanceController.GetAttendancesByMeeting(System.Int32)">
+            <summary>
+            Gets attendance details by meeting ID
+            </summary>
+            <param name="meetingId">The ID of the meeting to get attendance details for</param>
+            <returns>List of attendances for the specified meeting</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.AttendanceController.GetAttendance(System.Int32)">
+            <summary>
+            Gets a specific attendance by ID
+            </summary>
+            <param name="id">The ID of the attendance to retrieve</param>
+            <returns>The attendance if found, otherwise NotFound</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.AttendanceController.CreateAttendance(phoenix_sangam_api.Models.CreateAttendanceDto)">
+            <summary>
+            Creates a new attendance
+            </summary>
+            <param name="attendanceDto">The attendance data to create</param>
+            <returns>The created attendance with assigned ID</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.AttendanceController.UpdateAttendance(System.Int32,phoenix_sangam_api.Models.UpdateAttendanceDto)">
+            <summary>
+            Updates an existing attendance
+            </summary>
+            <param name="id">The ID of the attendance to update</param>
+            <param name="attendanceDto">The updated attendance data</param>
+            <returns>The updated attendance</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.AttendanceController.DeleteAttendance(System.Int32)">
+            <summary>
+            Deletes an attendance
+            </summary>
+            <param name="id">The ID of the attendance to delete</param>
+            <returns>No content on successful deletion</returns>
+        </member>
+        <member name="T:phoenix_sangam_api.Controllers.BaseController">
+            <summary>
+            Base controller with common functionality
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.GetCurrentUserId">
+            <summary>
+            Get current user ID from JWT token
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.GetCurrentUserRole">
+            <summary>
+            Get current user role from JWT token
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.IsSecretary">
+            <summary>
+            Check if current user is Secretary
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.GetCurrentUserAsync">
+            <summary>
+            Get current user from database
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.Success``1(``0,System.String)">
+            <summary>
+            Create success response
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.Error``1(System.String,System.Collections.Generic.List{System.String})">
+            <summary>
+            Create error response
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.NotFound``1(System.String)">
+            <summary>
+            Create not found response
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.HandleException``1(System.Exception,System.String)">
+            <summary>
+            Handle exceptions consistently
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.ValidateModelState``1">
+            <summary>
+            Validate model state and return errors if invalid
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.LogOperation(System.String,System.Object[])">
+            <summary>
+            Log operation with structured logging
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.LogWarning(System.String,System.Object[])">
+            <summary>
+            Log warning with structured logging
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.BaseController.LogError(System.Exception,System.String,System.Object[])">
+            <summary>
+            Log error with structured logging
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.GetMeetingDetails(System.Int32,System.Int32,System.String,System.String)">
+            <summary>
+            Gets meeting details with pagination and date filtering
+            </summary>
+            <param name="page">Page number (default: 1)</param>
+            <param name="pageSize">Number of items per page (default: 10, max: 100)</param>
+            <param name="startDate">Start date for filtering (format: yyyy-MM-dd)</param>
+            <param name="endDate">End date for filtering (format: yyyy-MM-dd)</param>
+            <returns>Paginated list of meeting details</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.GetDashboardSummary(System.String,System.String)">
+            <summary>
+            Gets dashboard summary statistics
+            </summary>
+            <param name="startDate">Start date for filtering (format: yyyy-MM-dd)</param>
+            <param name="endDate">End date for filtering (format: yyyy-MM-dd)</param>
+            <returns>Dashboard summary statistics</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.GetLoans">
+            <summary>
+            Gets loans list - returns user's loans only if not admin, all loans if admin
+            </summary>
+            <returns>Loans list filtered by user role</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.GetLoansDue">
+            <summary>
+            Gets loans with due dates that have passed and loans due within 2 weeks
+            </summary>
+            <returns>Loans with overdue and upcoming due dates</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.CreateLoanRequest(phoenix_sangam_api.CreateLoanRequestDto)">
+            <summary>
+            Creates a new loan request (accessible to all users)
+            </summary>
+            <param name="requestDto">Loan request details</param>
+            <returns>Created loan request</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.GetLoanRequests">
+            <summary>
+            Gets loan requests - returns user's requests only if not admin, all requests if admin
+            </summary>
+            <returns>Loan requests filtered by user role</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.GetLoanRequest(System.Int32)">
+            <summary>
+            Gets a specific loan request by ID
+            </summary>
+            <param name="id">Loan request ID</param>
+            <returns>Loan request details</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.DeleteLoanRequest(System.Int32)">
+            <summary>
+            Deletes a loan request (accessible to request owner and admin)
+            </summary>
+            <param name="id">Loan request ID</param>
+            <returns>Success response</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.ProcessLoanRequest(System.Int32,phoenix_sangam_api.LoanRequestActionDto)">
+            <summary>
+            Accepts or rejects a loan request (Secretary only)
+            </summary>
+            <param name="id">Loan request ID</param>
+            <param name="actionDto">Action to perform (accepted/rejected)</param>
+            <returns>Updated loan request</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.DashboardController.CalculateInterest(System.Decimal,System.Decimal,System.DateTime,System.DateTime)">
+            <summary>
+            Calculates interest amount based on monthly rate and days since loan issue
+            </summary>
+            <param name="monthlyRate">Monthly interest rate as percentage</param>
+            <param name="principal">Loan principal amount</param>
+            <param name="loanDate">Date when loan was issued</param>
+            <param name="calculationDate">Date to calculate interest until</param>
+            <returns>Interest amount</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.LoanController.CalculateInterest(System.Decimal,System.Decimal,System.DateTime,System.DateTime)">
+            <summary>
+            Calculates interest amount based on monthly rate and days since loan issue
+            </summary>
+            <param name="monthlyRate">Monthly interest rate as percentage</param>
+            <param name="principal">Loan principal amount</param>
+            <param name="loanDate">Date when loan was issued</param>
+            <param name="endDate">Date to calculate interest until (ClosedDate if available, otherwise DueDate)</param>
+            <returns>Interest amount</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.GetAllMeetings">
+            <summary>
+            Gets all meetings (Secretary only)
+            </summary>
+            <returns>List of all meetings</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.GetMeeting(System.Int32)">
+            <summary>
+            Gets a specific meeting by ID (Secretary only)
+            </summary>
+            <param name="id">The ID of the meeting to retrieve</param>
+            <returns>The meeting if found, otherwise NotFound</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.GetMeetingWithDetails(System.Int32)">
+            <summary>
+            Gets a meeting with all its details (attendances and payments)
+            </summary>
+            <param name="id">The ID of the meeting to retrieve</param>
+            <returns>The meeting with details if found, otherwise NotFound</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.GetMeetingSummary(System.Int32)">
+            <summary>
+            Gets a meeting with summary statistics (total payments and attendance count)
+            </summary>
+            <param name="id">The ID of the meeting to retrieve</param>
+            <returns>The meeting with summary statistics if found, otherwise NotFound</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.GetAllMeetingSummaries">
+            <summary>
+            Gets all meetings with summary statistics
+            </summary>
+            <returns>List of all meetings with summary statistics</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.CreateMeeting(phoenix_sangam_api.Models.CreateMeetingDto)">
+            <summary>
+            Creates a new meeting (Admin only)
+            </summary>
+            <param name="meetingDto">The meeting data to create</param>
+            <returns>The created meeting with assigned ID</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.UpdateMeeting(System.Int32,phoenix_sangam_api.Models.UpdateMeetingDto)">
+            <summary>
+            Updates an existing meeting (Admin only)
+            </summary>
+            <param name="id">The ID of the meeting to update</param>
+            <param name="meetingDto">The updated meeting data</param>
+            <returns>The updated meeting</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingController.DeleteMeeting(System.Int32)">
+            <summary>
+            Deletes a meeting (Admin only)
+            </summary>
+            <param name="id">The ID of the meeting to delete</param>
+            <returns>No content on successful deletion</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingPaymentController.GetAllMeetingPayments">
+            <summary>
+            Gets all meeting payments
+            </summary>
+            <returns>List of all meeting payments</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingPaymentController.GetMeetingPayment(System.Int32)">
+            <summary>
+            Gets a specific meeting payment by ID
+            </summary>
+            <param name="id">The ID of the meeting payment to retrieve</param>
+            <returns>The meeting payment if found, otherwise NotFound</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingPaymentController.CreateMeetingPayment(phoenix_sangam_api.Models.MeetingPayment)">
+            <summary>
+            Creates a new meeting payment
+            </summary>
+            <param name="meetingPayment">The meeting payment data to create</param>
+            <returns>The created meeting payment with assigned ID</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingPaymentController.UpdateMeetingPayment(System.Int32,phoenix_sangam_api.Models.MeetingPayment)">
+            <summary>
+            Updates an existing meeting payment
+            </summary>
+            <param name="id">The ID of the meeting payment to update</param>
+            <param name="meetingPayment">The updated meeting payment data</param>
+            <returns>The updated meeting payment</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.MeetingPaymentController.DeleteMeetingPayment(System.Int32)">
+            <summary>
+            Deletes a meeting payment
+            </summary>
+            <param name="id">The ID of the meeting payment to delete</param>
+            <returns>No content on successful deletion</returns>
+        </member>
+        <member name="T:phoenix_sangam_api.Controllers.OptimizedLoanController">
+            <summary>
+            Optimized Loan Controller using service layer and base controller
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.GetAllLoans">
+            <summary>
+            Get all loans (Secretary only)
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.GetLoan(System.Int32)">
+            <summary>
+            Get loan by ID (Secretary only)
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.CreateLoan(phoenix_sangam_api.CreateLoanDto)">
+            <summary>
+            Create new loan (Secretary only)
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.UpdateLoan(System.Int32,phoenix_sangam_api.CreateLoanDto)">
+            <summary>
+            Update loan (Secretary only)
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.DeleteLoan(System.Int32)">
+            <summary>
+            Delete loan (Secretary only)
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.LoanRepayment(phoenix_sangam_api.LoanRepaymentDto)">
+            <summary>
+            Process loan repayment (Secretary only)
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.OptimizedLoanController.GetLoanTypes">
+            <summary>
+            Get loan types
+            </summary>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.GetAllUsers">
+            <summary>
+            Gets all users (Secretary only) - excludes Secretary role users from the list
+            </summary>
+            <returns>List of all users excluding Secretary role</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.GetUser(System.Int32)">
+            <summary>
+            Gets a specific user by ID (Admin only)
+            </summary>
+            <param name="id">The ID of the user to retrieve</param>
+            <returns>The user if found, otherwise NotFound</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.CreateUser(phoenix_sangam_api.Models.User)">
+            <summary>
+            Creates a new user (Admin only)
+            </summary>
+            <param name="user">The user data to create</param>
+            <returns>The created user with assigned ID</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.UpdateUser(System.Int32,phoenix_sangam_api.Models.User)">
+            <summary>
+            Updates an existing user (Admin only)
+            </summary>
+            <param name="id">The ID of the user to update</param>
+            <param name="user">The updated user data</param>
+            <returns>The updated user</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.DeleteUser(System.Int32)">
+            <summary>
+            Deletes a user (Admin only)
+            </summary>
+            <param name="id">The ID of the user to delete</param>
+            <returns>No content on successful deletion</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.GetCurrentUser">
+            <summary>
+            Gets current user information from JWT token
+            </summary>
+            <returns>Current user details</returns>
+        </member>
+        <member name="M:phoenix_sangam_api.Controllers.UserController.HealthCheck">
+            <summary>
+            Health check endpoint for debugging
+            </summary>
+            <returns>Database connection status</returns>
+        </member>
+        <member name="T:phoenix_sangam_api.DTOs.ApiResponse`1">
+            <summary>
+            Base response wrapper for all API responses
+            </summary>
+            <typeparam name="T">Type of the data being returned</typeparam>
+        </member>
+        <member name="T:phoenix_sangam_api.DTOs.PaginatedResponse`1">
+            <summary>
+            Paginated response wrapper
+            </summary>
+            <typeparam name="T">Type of the data being returned</typeparam>
+        </member>
+        <member name="T:phoenix_sangam_api.DTOs.BaseDto">
+            <summary>
+            Base DTO with common properties
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.DTOs.BaseRequestDto">
+            <summary>
+            Base request DTO with validation
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.Middleware.ExceptionHandlingMiddleware">
+            <summary>
+            Global exception handling middleware
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.Middleware.RequestLoggingMiddleware">
+            <summary>
+            Request logging middleware
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.Migrations.InitialMigration">
+            <inheritdoc />
+        </member>
+        <member name="M:phoenix_sangam_api.Migrations.InitialMigration.Up(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:phoenix_sangam_api.Migrations.InitialMigration.Down(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:phoenix_sangam_api.Migrations.InitialMigration.BuildTargetModel(Microsoft.EntityFrameworkCore.ModelBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="T:phoenix_sangam_api.Migrations.AddLoanTermColumn">
+            <inheritdoc />
+        </member>
+        <member name="M:phoenix_sangam_api.Migrations.AddLoanTermColumn.Up(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:phoenix_sangam_api.Migrations.AddLoanTermColumn.Down(Microsoft.EntityFrameworkCore.Migrations.MigrationBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="M:phoenix_sangam_api.Migrations.AddLoanTermColumn.BuildTargetModel(Microsoft.EntityFrameworkCore.ModelBuilder)">
+            <inheritdoc />
+        </member>
+        <member name="T:phoenix_sangam_api.Repositories.GenericRepository`1">
+            <summary>
+            Generic repository implementation
+            </summary>
+            <typeparam name="T">Entity type</typeparam>
+        </member>
+        <member name="T:phoenix_sangam_api.Repositories.IGenericRepository`1">
+            <summary>
+            Generic repository interface for data access
+            </summary>
+            <typeparam name="T">Entity type</typeparam>
+        </member>
+        <member name="T:phoenix_sangam_api.Services.ICacheService">
+            <summary>
+            Cache service interface for performance optimization
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.Services.IValidationService">
+            <summary>
+            Validation service interface
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.Services.MemoryCacheService">
+            <summary>
+            Memory cache service implementation
+            </summary>
+        </member>
+        <member name="T:phoenix_sangam_api.Services.ValidationService">
+            <summary>
+            Validation service implementation
+            </summary>
+        </member>
+    </members>
+</doc>
