@@ -16,6 +16,8 @@ public class UserDbContext : DbContext
     public DbSet<Attendance> Attendances { get; set; }
     public DbSet<MeetingPayment> MeetingPayments { get; set; }
     public DbSet<Loan> Loans { get; set; }
+    public DbSet<LoanRequest> LoanRequests { get; set; }
+    public DbSet<LoanType> LoanTypes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -127,6 +129,42 @@ public class UserDbContext : DbContext
             entity.HasIndex(e => new { e.UserId, e.MeetingId }).IsUnique();
         });
 
+        // Configure LoanType entity
+        modelBuilder.Entity<LoanType>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.LoanTypeName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.InterestRate).IsRequired();
+            entity.HasIndex(e => e.LoanTypeName).IsUnique();
+        });
+
+        // Configure LoanRequest entity
+        modelBuilder.Entity<LoanRequest>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.Date).IsRequired().HasColumnType("timestamp with time zone");
+            entity.Property(e => e.DueDate).IsRequired().HasColumnType("timestamp with time zone");
+            entity.Property(e => e.LoanTypeId).IsRequired();
+            entity.Property(e => e.Amount).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.ProcessedDate).HasColumnType("timestamp with time zone");
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.LoanType)
+                  .WithMany()
+                  .HasForeignKey(e => e.LoanTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ProcessedByUser)
+                  .WithMany()
+                  .HasForeignKey(e => e.ProcessedByUserId)
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
         // Configure Loan entity
         modelBuilder.Entity<Loan>(entity =>
         {
@@ -136,7 +174,7 @@ public class UserDbContext : DbContext
             entity.Property(e => e.Date).IsRequired().HasColumnType("timestamp with time zone");
             entity.Property(e => e.DueDate).IsRequired().HasColumnType("timestamp with time zone");
             entity.Property(e => e.ClosedDate).HasColumnType("timestamp with time zone");
-            entity.Property(e => e.InterestRate).HasColumnType("decimal(18,2)").IsRequired();
+            entity.Property(e => e.LoanTypeId).IsRequired();
             entity.Property(e => e.Amount).HasColumnType("decimal(18,2)").IsRequired();
             entity.Property(e => e.InterestReceived).HasColumnType("decimal(18,2)");
             entity.Property(e => e.Status).IsRequired().HasMaxLength(50);
@@ -144,12 +182,16 @@ public class UserDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(e => e.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.LoanType)
+                  .WithMany()
+                  .HasForeignKey(e => e.LoanTypeId)
+                  .OnDelete(DeleteBehavior.Restrict);
         });
 
         // Seed initial data
         modelBuilder.Entity<UserRole>().HasData(
-            new UserRole { Id = 1, Name = "Admin", Description = "Administrator with full access" },
-            new UserRole { Id = 2, Name = "User", Description = "Regular user with limited access" }
+            new UserRole { Id = 1, Name = "Secretary", Description = "Secretary with full access" },
+            new UserRole { Id = 2, Name = "Member", Description = "Regular member with limited access" }
         );
         modelBuilder.Entity<User>().HasData(
             new User { Id = 1, Name = "John Doe", Address = "123 Main St", Email = "john@example.com", Phone = "555-0101", UserRoleId = 1 },
@@ -158,6 +200,10 @@ public class UserDbContext : DbContext
         modelBuilder.Entity<UserLogin>().HasData(
             new UserLogin { Id = 1, Username = "john@example.com", Password = "password1", UserId = 1 },
             new UserLogin { Id = 2, Username = "jane@example.com", Password = "password1", UserId = 2 }
+        );
+        modelBuilder.Entity<LoanType>().HasData(
+            new LoanType { Id = 1, LoanTypeName = "Marriage Loan", InterestRate = 1.5 },
+            new LoanType { Id = 2, LoanTypeName = "Personal Loan", InterestRate = 2.5 }
         );
     }
 } 

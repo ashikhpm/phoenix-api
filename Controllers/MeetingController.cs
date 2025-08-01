@@ -21,11 +21,11 @@ public class MeetingController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all meetings (Admin only)
+    /// Gets all meetings (Secretary only)
     /// </summary>
     /// <returns>List of all meetings</returns>
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<IEnumerable<MeetingResponseDto>>> GetAllMeetings()
     {
         try
@@ -56,12 +56,12 @@ public class MeetingController : ControllerBase
     }
 
     /// <summary>
-    /// Gets a specific meeting by ID (Admin only)
+    /// Gets a specific meeting by ID (Secretary only)
     /// </summary>
     /// <param name="id">The ID of the meeting to retrieve</param>
     /// <returns>The meeting if found, otherwise NotFound</returns>
     [HttpGet("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<MeetingResponseDto>> GetMeeting(int id)
     {
         try
@@ -277,7 +277,7 @@ public class MeetingController : ControllerBase
     /// <param name="meetingDto">The meeting data to create</param>
     /// <returns>The created meeting with assigned ID</returns>
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<MeetingResponseDto>> CreateMeeting([FromBody] CreateMeetingDto meetingDto)
     {
         try
@@ -340,7 +340,7 @@ public class MeetingController : ControllerBase
     /// <param name="meetingDto">The updated meeting data</param>
     /// <returns>The updated meeting</returns>
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<MeetingResponseDto>> UpdateMeeting(int id, [FromBody] UpdateMeetingDto meetingDto)
     {
         try
@@ -403,7 +403,7 @@ public class MeetingController : ControllerBase
     /// <param name="id">The ID of the meeting to delete</param>
     /// <returns>No content on successful deletion</returns>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult> DeleteMeeting(int id)
     {
         try

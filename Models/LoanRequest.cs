@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace phoenix_sangam_api.Models;
 
-public class Loan
+public class LoanRequest
 {
     public int Id { get; set; }
 
@@ -18,8 +18,6 @@ public class Loan
     [Required]
     public DateTime DueDate { get; set; }
 
-    public DateTime? ClosedDate { get; set; }
-
     [Required]
     [ForeignKey("LoanType")]
     public int LoanTypeId { get; set; }
@@ -28,9 +26,12 @@ public class Loan
     [Required]
     public decimal Amount { get; set; }
 
-    public decimal InterestReceived { get; set; }
-
     [Required]
     [StringLength(50)]
-    public string Status { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty; // Requested, Accepted, Rejected
+
+    public DateTime? ProcessedDate { get; set; }
+
+    public int? ProcessedByUserId { get; set; }
+    public User? ProcessedByUser { get; set; }
 } 

@@ -2,10 +2,10 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace phoenix_sangam_api.Attributes;
 
-public class AdminOnlyAttribute : AuthorizeAttribute
+public class SecretaryOnlyAttribute : AuthorizeAttribute
 {
-    public AdminOnlyAttribute()
+    public SecretaryOnlyAttribute()
     {
-        Roles = "Admin";
+        Roles = "Secretary";
     }
 } 

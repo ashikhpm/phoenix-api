@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using phoenix_sangam_api.Data;
 using phoenix_sangam_api.Models;
+using System.Security.Claims;
 
 namespace phoenix_sangam_api.Controllers;
 
@@ -233,6 +234,97 @@ public class DashboardController : ControllerBase
     }
 
     /// <summary>
+    /// Gets loans list - returns user's loans only if not admin, all loans if admin
+    /// </summary>
+    /// <returns>Loans list filtered by user role</returns>
+    [HttpGet("loans")]
+    public async Task<ActionResult<IEnumerable<LoanWithInterestDto>>> GetLoans()
+    {
+        try
+        {
+            _logger.LogInformation("Getting loans list");
+            
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Get the current user to check their role
+            var currentUser = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
+            
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Current user not found");
+                return BadRequest("Current user not found");
+            }
+
+            var today = DateTime.Today;
+            IQueryable<Loan> loansQuery;
+
+            // If user is secretary, return all loans; otherwise, return only user's loans
+            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Secretary user - returning all loans");
+                loansQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType);
+            }
+            else
+            {
+                _logger.LogInformation("Regular user - returning only user's loans. User ID: {UserId}", currentUserId);
+                loansQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == currentUserId);
+            }
+
+            var loans = await loansQuery.ToListAsync();
+            
+            var loansWithInterest = loans.Select(l => 
+            {
+                var isOverdue = false;
+                var daysOverdue = 0;
+                
+                // Only check for overdue if status is not "closed"
+                if (!string.Equals(l.Status, "closed", StringComparison.OrdinalIgnoreCase))
+                {
+                    daysOverdue = (today - l.DueDate.Date).Days;
+                    isOverdue = daysOverdue > 0;
+                }
+                
+                return new LoanWithInterestDto
+                {
+                    Id = l.Id,
+                    UserId = l.UserId,
+                    UserName = l.User?.Name ?? "Unknown User",
+                    Date = l.Date,
+                    DueDate = l.DueDate,
+                    ClosedDate = l.ClosedDate,
+                    LoanTypeId = l.LoanTypeId,
+                    LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                    InterestRate = l.LoanType?.InterestRate ?? 0,
+                    Amount = l.Amount,
+                    InterestReceived = l.InterestReceived,
+                    Status = l.Status,
+                    DaysSinceIssue = (today - l.Date.Date).Days,
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                    IsOverdue = isOverdue,
+                    DaysOverdue = daysOverdue
+                };
+            }).ToList();
+            
+            _logger.LogInformation("Retrieved {Count} loans for user {UserId}", loansWithInterest.Count, currentUserId);
+            
+            return Ok(loansWithInterest);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving loans list");
+            return StatusCode(500, "An error occurred while retrieving loans list");
+        }
+    }
+
+    /// <summary>
     /// Gets loans with due dates that have passed and loans due within 2 weeks
     /// </summary>
     /// <returns>Loans with overdue and upcoming due dates</returns>
@@ -243,20 +335,55 @@ public class DashboardController : ControllerBase
         {
             _logger.LogInformation("Getting loans with due dates");
             
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Get the current user to check their role
+            var currentUser = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
+            
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Current user not found");
+                return BadRequest("Current user not found");
+            }
+
             var today = DateTime.Today;
             var twoWeeksFromNow = today.AddDays(14);
             
-            // Get overdue loans (due date has passed)
-            var overdueLoans = await _context.Loans
-                .Include(l => l.User)
-                .Where(l => l.DueDate.Date < today)
+            // Build base query based on user role
+            IQueryable<Loan> baseQuery;
+            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Secretary user - returning all loans due");
+                baseQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType);
+            }
+            else
+            {
+                _logger.LogInformation("Regular user - returning only user's loans due. User ID: {UserId}", currentUserId);
+                baseQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == currentUserId);
+            }
+            
+            // Get overdue loans (due date has passed) - exclude closed loans
+            var overdueLoans = await baseQuery
+                .Where(l => l.DueDate.Date < today && 
+                           l.ClosedDate == null && 
+                           l.Status.ToLower() != "closed")
                 .OrderBy(l => l.DueDate)
                 .ToListAsync();
             
-            // Get loans due within 2 weeks
-            var upcomingLoans = await _context.Loans
-                .Include(l => l.User)
-                .Where(l => l.DueDate.Date >= today && l.DueDate.Date <= twoWeeksFromNow)
+            // Get loans due within 2 weeks - exclude closed loans
+            var upcomingLoans = await baseQuery
+                .Where(l => l.DueDate.Date >= today && 
+                           l.DueDate.Date <= twoWeeksFromNow && 
+                           l.ClosedDate == null && 
+                           l.Status.ToLower() != "closed")
                 .OrderBy(l => l.DueDate)
                 .ToListAsync();
             
@@ -269,11 +396,13 @@ public class DashboardController : ControllerBase
                     UserName = l.User?.Name ?? "Unknown User",
                     Date = l.Date,
                     DueDate = l.DueDate,
-                    InterestRate = l.InterestRate,
+                    LoanTypeId = l.LoanTypeId,
+                    LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                    InterestRate = l.LoanType?.InterestRate ?? 0,
                     Amount = l.Amount,
                     Status = l.Status,
                     DaysOverdue = (today - l.DueDate.Date).Days,
-                    InterestAmount = CalculateInterest(l.InterestRate, l.Amount, l.Date, today)
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate)
                 }).ToList(),
                 UpcomingLoans = upcomingLoans.Select(l => new LoanDueDto
                 {
@@ -282,11 +411,13 @@ public class DashboardController : ControllerBase
                     UserName = l.User?.Name ?? "Unknown User",
                     Date = l.Date,
                     DueDate = l.DueDate,
-                    InterestRate = l.InterestRate,
+                    LoanTypeId = l.LoanTypeId,
+                    LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                    InterestRate = l.LoanType?.InterestRate ?? 0,
                     Amount = l.Amount,
                     Status = l.Status,
                     DaysUntilDue = (l.DueDate.Date - today).Days,
-                    InterestAmount = CalculateInterest(l.InterestRate, l.Amount, l.Date, today)
+                    InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate)
                 }).ToList()
             };
             
@@ -299,6 +430,363 @@ public class DashboardController : ControllerBase
         {
             _logger.LogError(ex, "Error retrieving loans due");
             return StatusCode(500, "An error occurred while retrieving loans due");
+        }
+    }
+
+    /// <summary>
+    /// Creates a new loan request (accessible to all users)
+    /// </summary>
+    /// <param name="requestDto">Loan request details</param>
+    /// <returns>Created loan request</returns>
+    [HttpPost("loan-requests")]
+    public async Task<ActionResult<LoanRequestResponseDto>> CreateLoanRequest([FromBody] CreateLoanRequestDto requestDto)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Verify that the user exists
+            var user = await _context.Users.FindAsync(currentUserId);
+            if (user == null)
+                return BadRequest("User not found");
+
+            // Parse the due date
+            if (!DateTime.TryParse(requestDto.DueDate, out DateTime parsedDueDate))
+            {
+                return BadRequest("Invalid due date format. Please use yyyy-MM-dd format.");
+            }
+
+            var loanRequest = new LoanRequest
+            {
+                UserId = currentUserId,
+                Date = DateTime.SpecifyKind(DateTime.Today, DateTimeKind.Utc),
+                DueDate = DateTime.SpecifyKind(parsedDueDate.Date, DateTimeKind.Utc),
+                LoanTypeId = requestDto.LoanTypeId,
+                Amount = requestDto.Amount,
+                Status = "Requested"
+            };
+
+            _context.LoanRequests.Add(loanRequest);
+            await _context.SaveChangesAsync();
+
+            var response = new LoanRequestResponseDto
+            {
+                Id = loanRequest.Id,
+                UserId = loanRequest.UserId,
+                UserName = user.Name,
+                Date = loanRequest.Date,
+                DueDate = loanRequest.DueDate,
+                LoanTypeId = loanRequest.LoanTypeId,
+                LoanTypeName = "Unknown", // Will be populated when retrieved with includes
+                InterestRate = 0, // Will be populated when retrieved with includes
+                Amount = loanRequest.Amount,
+                Status = loanRequest.Status,
+                RequestDate = loanRequest.Date
+            };
+
+            _logger.LogInformation("Loan request created by user {UserId} for amount {Amount}", currentUserId, requestDto.Amount);
+            return CreatedAtAction(nameof(GetLoanRequest), new { id = loanRequest.Id }, response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating loan request");
+            return StatusCode(500, "An error occurred while creating the loan request");
+        }
+    }
+
+    /// <summary>
+    /// Gets loan requests - returns user's requests only if not admin, all requests if admin
+    /// </summary>
+    /// <returns>Loan requests filtered by user role</returns>
+    [HttpGet("loan-requests")]
+    public async Task<ActionResult<IEnumerable<LoanRequestResponseDto>>> GetLoanRequests()
+    {
+        try
+        {
+            _logger.LogInformation("Getting loan requests");
+
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Get the current user to check their role
+            var currentUser = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Current user not found");
+                return BadRequest("Current user not found");
+            }
+
+            IQueryable<LoanRequest> requestsQuery;
+
+            // If user is secretary, return all requests; otherwise, return only user's requests
+            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation("Secretary user - returning all loan requests");
+                requestsQuery = _context.LoanRequests.Include(l => l.User).Include(l => l.LoanType);
+            }
+            else
+            {
+                _logger.LogInformation("Regular user - returning only user's loan requests. User ID: {UserId}", currentUserId);
+                requestsQuery = _context.LoanRequests.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == currentUserId);
+            }
+
+            var requests = await requestsQuery.OrderByDescending(l => l.Date).ToListAsync();
+
+            var response = requests.Select(l => new LoanRequestResponseDto
+            {
+                Id = l.Id,
+                UserId = l.UserId,
+                UserName = l.User?.Name ?? "Unknown User",
+                Date = l.Date,
+                DueDate = l.DueDate,
+                LoanTypeId = l.LoanTypeId,
+                LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                InterestRate = l.LoanType?.InterestRate ?? 0,
+                Amount = l.Amount,
+                Status = l.Status,
+                RequestDate = l.Date,
+                ProcessedDate = l.ProcessedDate,
+                ProcessedByUserName = l.ProcessedByUser?.Name
+            }).ToList();
+
+            _logger.LogInformation("Retrieved {Count} loan requests for user {UserId}", response.Count, currentUserId);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving loan requests");
+            return StatusCode(500, "An error occurred while retrieving loan requests");
+        }
+    }
+
+    /// <summary>
+    /// Gets a specific loan request by ID
+    /// </summary>
+    /// <param name="id">Loan request ID</param>
+    /// <returns>Loan request details</returns>
+    [HttpGet("loan-requests/{id}")]
+    public async Task<ActionResult<LoanRequestResponseDto>> GetLoanRequest(int id)
+    {
+        try
+        {
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Get the current user to check their role
+            var currentUser = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Current user not found");
+                return BadRequest("Current user not found");
+            }
+
+            var loanRequest = await _context.LoanRequests
+                .Include(l => l.User)
+                .Include(l => l.LoanType)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (loanRequest == null)
+                return NotFound("Loan request not found");
+
+            // Check if user has access to this request
+            bool isSecretary = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase);
+            if (!isSecretary && loanRequest.UserId != currentUserId)
+            {
+                _logger.LogWarning("User {UserId} attempted to access loan request {RequestId} without permission", currentUserId, id);
+                return Forbid();
+            }
+
+            var response = new LoanRequestResponseDto
+            {
+                Id = loanRequest.Id,
+                UserId = loanRequest.UserId,
+                UserName = loanRequest.User?.Name ?? "Unknown User",
+                Date = loanRequest.Date,
+                DueDate = loanRequest.DueDate,
+                LoanTypeId = loanRequest.LoanTypeId,
+                LoanTypeName = loanRequest.LoanType?.LoanTypeName ?? "Unknown",
+                InterestRate = loanRequest.LoanType?.InterestRate ?? 0,
+                Amount = loanRequest.Amount,
+                Status = loanRequest.Status,
+                RequestDate = loanRequest.Date,
+                ProcessedDate = loanRequest.ProcessedDate,
+                ProcessedByUserName = loanRequest.ProcessedByUser?.Name
+            };
+
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving loan request {Id}", id);
+            return StatusCode(500, "An error occurred while retrieving the loan request");
+        }
+    }
+
+    /// <summary>
+    /// Deletes a loan request (accessible to request owner and admin)
+    /// </summary>
+    /// <param name="id">Loan request ID</param>
+    /// <returns>Success response</returns>
+    [HttpDelete("loan-requests/{id}")]
+    public async Task<ActionResult> DeleteLoanRequest(int id)
+    {
+        try
+        {
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Get the current user to check their role
+            var currentUser = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            if (currentUser == null)
+            {
+                _logger.LogWarning("Current user not found");
+                return BadRequest("Current user not found");
+            }
+
+            var loanRequest = await _context.LoanRequests
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (loanRequest == null)
+                return NotFound("Loan request not found");
+
+            // Check if user has permission to delete this request
+            bool isSecretary = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase);
+            if (!isSecretary && loanRequest.UserId != currentUserId)
+            {
+                _logger.LogWarning("User {UserId} attempted to delete loan request {RequestId} without permission", currentUserId, id);
+                return Forbid();
+            }
+
+            _context.LoanRequests.Remove(loanRequest);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Loan request {RequestId} deleted by user {UserId}", id, currentUserId);
+            return NoContent();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting loan request {Id}", id);
+            return StatusCode(500, "An error occurred while deleting the loan request");
+        }
+    }
+
+    /// <summary>
+    /// Accepts or rejects a loan request (Secretary only)
+    /// </summary>
+    /// <param name="id">Loan request ID</param>
+    /// <param name="actionDto">Action to perform (accepted/rejected)</param>
+    /// <returns>Updated loan request</returns>
+    [HttpPut("loan-requests/{id}/action")]
+    [Authorize(Roles = "Secretary")]
+    public async Task<ActionResult<LoanRequestResponseDto>> ProcessLoanRequest(int id, [FromBody] LoanRequestActionDto actionDto)
+    {
+        try
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var loanRequest = await _context.LoanRequests
+                .Include(l => l.User)
+                .Include(l => l.LoanType)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
+            if (loanRequest == null)
+                return NotFound("Loan request not found");
+
+            // Validate action
+            var action = actionDto.Action.ToLower();
+            if (action != "accepted" && action != "rejected")
+            {
+                return BadRequest("Action must be 'accepted' or 'rejected'");
+            }
+
+            // Get the current secretary user
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int adminUserId))
+            {
+                return BadRequest("Secretary user ID not found in token");
+            }
+
+            // Update the loan request status
+            loanRequest.Status = action;
+            loanRequest.ProcessedDate = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
+            loanRequest.ProcessedByUserId = adminUserId;
+
+            // If accepted, create a new loan
+            if (action == "accepted")
+            {
+                var newLoan = new Loan
+                {
+                    UserId = loanRequest.UserId,
+                    Date = loanRequest.Date,
+                    DueDate = loanRequest.DueDate,
+                    LoanTypeId = loanRequest.LoanTypeId,
+                    Amount = loanRequest.Amount,
+                    Status = "active",
+                    ClosedDate = null
+                };
+                _context.Loans.Add(newLoan);
+            }
+
+            await _context.SaveChangesAsync();
+
+            var response = new LoanRequestResponseDto
+            {
+                Id = loanRequest.Id,
+                UserId = loanRequest.UserId,
+                UserName = loanRequest.User?.Name ?? "Unknown User",
+                Date = loanRequest.Date,
+                DueDate = loanRequest.DueDate,
+                LoanTypeId = loanRequest.LoanTypeId,
+                LoanTypeName = loanRequest.LoanType?.LoanTypeName ?? "Unknown",
+                InterestRate = loanRequest.LoanType?.InterestRate ?? 0,
+                Amount = loanRequest.Amount,
+                Status = loanRequest.Status,
+                RequestDate = loanRequest.Date,
+                ProcessedDate = loanRequest.ProcessedDate,
+                ProcessedByUserName = loanRequest.ProcessedByUser?.Name
+            };
+
+            _logger.LogInformation("Loan request {RequestId} {Action} by secretary", id, action);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing loan request {Id}", id);
+            return StatusCode(500, "An error occurred while processing the loan request");
         }
     }
     

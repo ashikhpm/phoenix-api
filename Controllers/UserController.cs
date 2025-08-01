@@ -29,11 +29,11 @@ public class UserController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all users (Admin only)
+    /// Gets all users (Secretary only)
     /// </summary>
     /// <returns>List of all users</returns>
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<IEnumerable<User>>> GetAllUsers()
     {
         try
@@ -56,7 +56,7 @@ public class UserController : ControllerBase
     /// <param name="id">The ID of the user to retrieve</param>
     /// <returns>The user if found, otherwise NotFound</returns>
     [HttpGet("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<User>> GetUser(int id)
     {
         try
@@ -86,7 +86,7 @@ public class UserController : ControllerBase
     /// <param name="user">The user data to create</param>
     /// <returns>The created user with assigned ID</returns>
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<User>> CreateUser([FromBody] User user)
     {
         try
@@ -110,11 +110,11 @@ public class UserController : ControllerBase
                 return BadRequest("Email already exists");
             }
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
-
             // Assign default role (User role - ID 2)
             user.UserRoleId = 2;
+            
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
             
             // Create UserLogin entry
             var userLogin = new UserLogin
@@ -143,7 +143,7 @@ public class UserController : ControllerBase
     /// <param name="user">The updated user data</param>
     /// <returns>The updated user</returns>
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<User>> UpdateUser(int id, [FromBody] User user)
     {
         try
@@ -197,7 +197,7 @@ public class UserController : ControllerBase
     /// <param name="id">The ID of the user to delete</param>
     /// <returns>No content on successful deletion</returns>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult> DeleteUser(int id)
     {
         try
@@ -221,6 +221,52 @@ public class UserController : ControllerBase
         {
             _logger.LogError(ex, "Error deleting user with ID: {Id}", id);
             return StatusCode(500, "An error occurred while deleting the user");
+        }
+    }
+
+    /// <summary>
+    /// Gets current user information from JWT token
+    /// </summary>
+    /// <returns>Current user details</returns>
+    [HttpGet("me")]
+    public async Task<IActionResult> GetCurrentUser()
+    {
+        try
+        {
+            // Get the current user's ID from the JWT token
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int currentUserId))
+            {
+                _logger.LogWarning("User ID not found in token");
+                return BadRequest("User ID not found in token");
+            }
+
+            // Get the current user with role information
+            var user = await _context.Users
+                .Include(u => u.UserRole)
+                .FirstOrDefaultAsync(u => u.Id == currentUserId);
+
+            if (user == null)
+            {
+                _logger.LogWarning("Current user not found");
+                return NotFound("User not found");
+            }
+
+            var response = new
+            {
+                id = user.Id,
+                name = user.Name,
+                email = user.Email,
+                role = user.UserRole?.Name ?? "Unknown"
+            };
+
+            _logger.LogInformation("Retrieved current user: {UserId}", user.Id);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving current user");
+            return StatusCode(500, "An error occurred while retrieving user information");
         }
     }
 
@@ -288,7 +334,7 @@ public class UserController : ControllerBase
                 id = userLogin.User!.Id,
                 name = userLogin.User.Name,
                 email = userLogin.User.Email,
-                role = userLogin.User.UserRole?.Name ?? "User"
+                role = userLogin.User.UserRole?.Name ?? "Member"
             }
         });
     }
@@ -306,7 +352,7 @@ public class UserController : ControllerBase
             new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, user.Id.ToString()),
             new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Name, user.Name),
             new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Email, user.Email),
-            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, user.UserRole?.Name ?? "User")
+                            new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.Role, user.UserRole?.Name ?? "Member")
         };
 
         var key = new SymmetricSecurityKey(System.Text.Encoding.UTF8.GetBytes(secretKey));
@@ -322,4 +368,5 @@ public class UserController : ControllerBase
 
         return new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().WriteToken(token);
     }
+    
 } 

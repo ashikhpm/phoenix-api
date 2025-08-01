@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using phoenix_sangam_api.Data;
@@ -11,9 +12,11 @@ using phoenix_sangam_api.Data;
 namespace phoenix_sangam_api.Migrations
 {
     [DbContext(typeof(UserDbContext))]
-    partial class UserDbContextModelSnapshot : ModelSnapshot
+    [Migration("20250801045718_AddLoanTypesAndLoanRequests")]
+    partial class AddLoanTypesAndLoanRequests
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -378,14 +381,14 @@ namespace phoenix_sangam_api.Migrations
                         new
                         {
                             Id = 1,
-                            Description = "Secretary with full access",
-                            Name = "Secretary"
+                            Description = "Administrator with full access",
+                            Name = "Admin"
                         },
                         new
                         {
                             Id = 2,
-                            Description = "Regular member with limited access",
-                            Name = "Member"
+                            Description = "Regular user with limited access",
+                            Name = "User"
                         });
                 });
 

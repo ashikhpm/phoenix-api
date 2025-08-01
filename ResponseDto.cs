@@ -124,7 +124,9 @@ public class LoanDueDto
     public string UserName { get; set; } = string.Empty;
     public DateTime Date { get; set; }
     public DateTime DueDate { get; set; }
-    public decimal InterestRate { get; set; }
+    public int LoanTypeId { get; set; }
+    public string LoanTypeName { get; set; } = string.Empty;
+    public double InterestRate { get; set; }
     public decimal Amount { get; set; }
     public string Status { get; set; } = string.Empty;
     public int? DaysOverdue { get; set; }

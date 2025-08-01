@@ -22,10 +22,10 @@ public class LoanController : ControllerBase
 
     // GET: api/loan (Admin only)
     [HttpGet]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<IEnumerable<LoanWithInterestDto>>> GetAllLoans()
     {
-        var loans = await _context.Loans.Include(l => l.User).ToListAsync();
+        var loans = await _context.Loans.Include(l => l.User).Include(l => l.LoanType).ToListAsync();
         var today = DateTime.Today;
         
         var loansWithInterest = loans.Select(l => 
@@ -48,12 +48,14 @@ public class LoanController : ControllerBase
                 Date = l.Date,
                 DueDate = l.DueDate,
                 ClosedDate = l.ClosedDate,
-                InterestRate = l.InterestRate,
+                LoanTypeId = l.LoanTypeId,
+                LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
+                InterestRate = l.LoanType?.InterestRate ?? 0,
                 Amount = l.Amount,
                 InterestReceived = l.InterestReceived,
                 Status = l.Status,
                 DaysSinceIssue = (today - l.Date.Date).Days,
-                InterestAmount = CalculateInterest(l.InterestRate, l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
+                InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
                 IsOverdue = isOverdue,
                 DaysOverdue = daysOverdue
             };
@@ -64,10 +66,10 @@ public class LoanController : ControllerBase
 
     // GET: api/loan/{id} (Admin only)
     [HttpGet("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<LoanWithInterestDto>> GetLoan(int id)
     {
-        var loan = await _context.Loans.Include(l => l.User).FirstOrDefaultAsync(l => l.Id == id);
+        var loan = await _context.Loans.Include(l => l.User).Include(l => l.LoanType).FirstOrDefaultAsync(l => l.Id == id);
         if (loan == null)
             return NotFound();
             
@@ -90,12 +92,14 @@ public class LoanController : ControllerBase
             Date = loan.Date,
             DueDate = loan.DueDate,
             ClosedDate = loan.ClosedDate,
-            InterestRate = loan.InterestRate,
+            LoanTypeId = loan.LoanTypeId,
+            LoanTypeName = loan.LoanType?.LoanTypeName ?? "Unknown",
+            InterestRate = loan.LoanType?.InterestRate ?? 0,
             Amount = loan.Amount,
             InterestReceived = loan.InterestReceived,
             Status = loan.Status,
             DaysSinceIssue = (today - loan.Date.Date).Days,
-            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
+            InterestAmount = CalculateInterest((decimal)(loan.LoanType?.InterestRate ?? 0), loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
             IsOverdue = isOverdue,
             DaysOverdue = daysOverdue
         };
@@ -105,7 +109,7 @@ public class LoanController : ControllerBase
 
     // POST: api/loan (Admin only)
     [HttpPost]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<LoanWithInterestDto>> CreateLoan([FromBody] CreateLoanDto loanDto)
     {
         if (!ModelState.IsValid)
@@ -115,6 +119,11 @@ public class LoanController : ControllerBase
         var user = await _context.Users.FindAsync(loanDto.UserId);
         if (user == null)
             return BadRequest("User not found");
+
+        // Verify that the loan type exists
+        var loanType = await _context.LoanTypes.FindAsync(loanDto.LoanTypeId);
+        if (loanType == null)
+            return BadRequest("Loan type not found");
 
         // Parse and convert dates to UTC
         if (!DateTime.TryParse(loanDto.Date, out DateTime parsedDate))
@@ -143,7 +152,7 @@ public class LoanController : ControllerBase
             Date = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc),
             DueDate = DateTime.SpecifyKind(parsedDueDate.Date, DateTimeKind.Utc),
             ClosedDate = parsedClosedDate,
-            InterestRate = loanDto.InterestRate,
+            LoanTypeId = loanDto.LoanTypeId,
             Amount = loanDto.Amount,
             Status = loanDto.Status
         };
@@ -171,12 +180,14 @@ public class LoanController : ControllerBase
             Date = loan.Date,
             DueDate = loan.DueDate,
             ClosedDate = loan.ClosedDate,
-            InterestRate = loan.InterestRate,
+            LoanTypeId = loan.LoanTypeId,
+            LoanTypeName = "Unknown", // Will be populated when loan is retrieved with includes
+            InterestRate = 0, // Will be populated when loan is retrieved with includes
             Amount = loan.Amount,
             InterestReceived = loan.InterestReceived,
             Status = loan.Status,
             DaysSinceIssue = (today - loan.Date.Date).Days,
-            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
+            InterestAmount = 0, // Will be calculated when loan is retrieved with includes
             IsOverdue = isOverdue,
             DaysOverdue = daysOverdue
         };
@@ -186,7 +197,7 @@ public class LoanController : ControllerBase
 
     // PUT: api/loan/{id} (Admin only)
     [HttpPut("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<IActionResult> UpdateLoan(int id, [FromBody] CreateLoanDto loanDto)
     {
         if (!ModelState.IsValid)
@@ -200,6 +211,11 @@ public class LoanController : ControllerBase
         var user = await _context.Users.FindAsync(loanDto.UserId);
         if (user == null)
             return BadRequest("User not found");
+
+        // Verify that the loan type exists
+        var loanType = await _context.LoanTypes.FindAsync(loanDto.LoanTypeId);
+        if (loanType == null)
+            return BadRequest("Loan type not found");
 
         // Parse and convert dates to UTC
         if (!DateTime.TryParse(loanDto.Date, out DateTime parsedDate))
@@ -226,7 +242,7 @@ public class LoanController : ControllerBase
         existingLoan.Date = DateTime.SpecifyKind(parsedDate.Date, DateTimeKind.Utc);
         existingLoan.DueDate = DateTime.SpecifyKind(parsedDueDate.Date, DateTimeKind.Utc);
         existingLoan.ClosedDate = parsedClosedDate;
-        existingLoan.InterestRate = loanDto.InterestRate;
+        existingLoan.LoanTypeId = loanDto.LoanTypeId;
         existingLoan.Amount = loanDto.Amount;
         existingLoan.Status = loanDto.Status;
         
@@ -236,7 +252,7 @@ public class LoanController : ControllerBase
 
     // DELETE: api/loan/{id} (Admin only)
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<IActionResult> DeleteLoan(int id)
     {
         var loan = await _context.Loans.FindAsync(id);
@@ -249,14 +265,14 @@ public class LoanController : ControllerBase
 
     // POST: api/loan/repayment (Admin only)
     [HttpPost("repayment")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Roles = "Secretary")]
     public async Task<ActionResult<LoanWithInterestDto>> LoanRepayment([FromBody] LoanRepaymentDto repaymentDto)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
         // Verify that the loan exists
-        var loan = await _context.Loans.Include(l => l.User).FirstOrDefaultAsync(l => l.Id == repaymentDto.LoanId);
+        var loan = await _context.Loans.Include(l => l.User).Include(l => l.LoanType).FirstOrDefaultAsync(l => l.Id == repaymentDto.LoanId);
         if (loan == null)
             return BadRequest("Loan not found");
 
@@ -302,11 +318,13 @@ public class LoanController : ControllerBase
             Date = loan.Date,
             DueDate = loan.DueDate,
             ClosedDate = loan.ClosedDate,
-            InterestRate = loan.InterestRate,
+            LoanTypeId = loan.LoanTypeId,
+            LoanTypeName = loan.LoanType?.LoanTypeName ?? "Unknown",
+            InterestRate = loan.LoanType?.InterestRate ?? 0,
             Amount = loan.Amount,
             Status = loan.Status,
             DaysSinceIssue = (today - loan.Date.Date).Days,
-            InterestAmount = CalculateInterest(loan.InterestRate, loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
+            InterestAmount = CalculateInterest((decimal)(loan.LoanType?.InterestRate ?? 0), loan.Amount, loan.Date, loan.ClosedDate ?? loan.DueDate),
             IsOverdue = isOverdue,
             DaysOverdue = daysOverdue
         };
@@ -317,6 +335,33 @@ public class LoanController : ControllerBase
         return Ok(loanWithInterest);
     }
     
+    // GET: api/loan/types (Available to all authenticated users)
+    [HttpGet("types")]
+    public async Task<ActionResult<IEnumerable<LoanTypeDto>>> GetLoanTypes()
+    {
+        try
+        {
+            var loanTypes = await _context.LoanTypes
+                .OrderBy(lt => lt.LoanTypeName)
+                .ToListAsync();
+
+            var response = loanTypes.Select(lt => new LoanTypeDto
+            {
+                Id = lt.Id,
+                LoanTypeName = lt.LoanTypeName,
+                InterestRate = lt.InterestRate
+            }).ToList();
+
+            _logger.LogInformation("Retrieved {Count} loan types", response.Count);
+            return Ok(response);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving loan types");
+            return StatusCode(500, "An error occurred while retrieving loan types");
+        }
+    }
+
     /// <summary>
     /// Calculates interest amount based on monthly rate and days since loan issue
     /// </summary>
