@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using phoenix_sangam_api.Services;
 using phoenix_sangam_api.Data;
 using phoenix_sangam_api.DTOs;
 using phoenix_sangam_api.Models;
@@ -12,15 +13,14 @@ namespace phoenix_sangam_api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Authorize]
-public class DashboardController : ControllerBase
+public class DashboardController : BaseController
 {
-    private readonly UserDbContext _context;
-    private readonly ILogger<DashboardController> _logger;
+    private readonly IEmailService _emailService;
 
-    public DashboardController(UserDbContext context, ILogger<DashboardController> logger)
+    public DashboardController(UserDbContext context, ILogger<DashboardController> logger, IEmailService emailService, IUserActivityService userActivityService, IServiceProvider serviceProvider)
+        : base(context, logger, userActivityService, serviceProvider)
     {
-        _context = context;
-        _logger = logger;
+        _emailService = emailService;
     }
 
     /// <summary>
@@ -238,7 +238,7 @@ public class DashboardController : ControllerBase
                 TotalMeetings = meetings.Count,
                 TotalMainPayment = meetings.Sum(m => m.MeetingPayments.Sum(p => p.MainPayment)),
                 TotalWeeklyPayment = meetings.Sum(m => m.MeetingPayments.Sum(p => p.WeeklyPayment)),
-                TotalUsers = await _context.Users.Where(u => u.UserRoleId != 1).CountAsync(), // Exclude Secretary role
+                TotalUsers = await GetCurrentEligibleUsersCount(), // Get eligible users for current date
                 TotalLoans = await _context.Loans.CountAsync(),
                 TotalLoanAmount = await _context.Loans.SumAsync(l => l.Amount),
                 TotalInterestAmount = await _context.Loans.SumAsync(l => l.InterestReceived),
@@ -279,7 +279,8 @@ public class DashboardController : ControllerBase
                         InterestAmount = l.InterestReceived,
                         IsOverdue = l.DueDate < DateTime.Today && l.ClosedDate == null && l.Status.ToLower() != "closed",
                         DaysOverdue = l.DueDate < DateTime.Today && l.ClosedDate == null && l.Status.ToLower() != "closed" ? 
-                            (int)(DateTime.Today - l.DueDate).TotalDays : 0
+                            (int)(DateTime.Today - l.DueDate).TotalDays : 0,
+                        ChequeNumber = l.ChequeNumber
                     })
                     .ToListAsync()
             };
@@ -330,10 +331,12 @@ public class DashboardController : ControllerBase
             var today = DateTime.Today;
             IQueryable<Loan> loansQuery;
 
-            // If user is secretary, return all loans; otherwise, return only user's loans
-            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            // If user is admin (Secretary, President, Treasurer), return all loans; otherwise, return only user's loans
+            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.UserRole?.Name, "President", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(currentUser.UserRole?.Name, "Treasurer", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogInformation("Secretary user - returning all loans");
+                _logger.LogInformation("Admin user ({Role}) - returning all loans", currentUser.UserRole?.Name);
                 loansQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType);
             }
             else
@@ -377,7 +380,8 @@ public class DashboardController : ControllerBase
                     InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
                     IsOverdue = isOverdue,
                     DaysOverdue = daysOverdue,
-                    DaysUntilDue = daysUntilDue
+                    DaysUntilDue = daysUntilDue,
+                    ChequeNumber = l.ChequeNumber
                 };
             }).ToList();
             
@@ -397,7 +401,7 @@ public class DashboardController : ControllerBase
     /// </summary>
     /// <returns>Loans with overdue and upcoming due dates</returns>
     [HttpGet("loans-due")]
-    public async Task<ActionResult<LoanDueResponse>> GetLoansDue()
+    public async Task<ActionResult<LoanDueResponse>> GetLoansDue([FromQuery] int? userId = null)
     {
         try
         {
@@ -425,15 +429,31 @@ public class DashboardController : ControllerBase
             var today = DateTime.Today;
             var twoWeeksFromNow = today.AddDays(14);
             
-            // Build base query based on user role
+            // Check if current user is admin
+            bool isAdminUser = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(currentUser.UserRole?.Name, "President", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(currentUser.UserRole?.Name, "Treasurer", StringComparison.OrdinalIgnoreCase);
+            
+            // Build base query based on user role and userId parameter
             IQueryable<Loan> baseQuery;
-            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            if (isAdminUser)
             {
-                _logger.LogInformation("Secretary user - returning all loans due");
-                baseQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType);
+                if (userId.HasValue)
+                {
+                    // Admin user requesting specific user's loans
+                    _logger.LogInformation("Admin user ({Role}) - returning loans due for user {TargetUserId}", currentUser.UserRole?.Name, userId.Value);
+                    baseQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == userId.Value);
+                }
+                else
+                {
+                    // Admin user requesting all loans (current behavior)
+                    _logger.LogInformation("Admin user ({Role}) - returning all loans due", currentUser.UserRole?.Name);
+                    baseQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType);
+                }
             }
             else
             {
+                // Regular user can only see their own loans (current behavior)
                 _logger.LogInformation("Regular user - returning only user's loans due. User ID: {UserId}", currentUserId);
                 baseQuery = _context.Loans.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == currentUserId);
             }
@@ -484,7 +504,8 @@ public class DashboardController : ControllerBase
                     InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
                     IsOverdue = true,
                     DaysOverdue = (today - l.DueDate.Date).Days,
-                    DaysUntilDue = (l.DueDate.Date - today).Days
+                    DaysUntilDue = (l.DueDate.Date - today).Days,
+                    ChequeNumber = l.ChequeNumber
                 }).ToList(),
                 DueTodayLoans = dueTodayLoans.Select(l => new LoanWithInterestDto
                 {
@@ -505,7 +526,8 @@ public class DashboardController : ControllerBase
                     InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
                     IsOverdue = false,
                     DaysOverdue = 0,
-                    DaysUntilDue = 0
+                    DaysUntilDue = 0,
+                    ChequeNumber = l.ChequeNumber
                 }).ToList(),
                 DueThisWeekLoans = dueThisWeekLoans.Select(l => new LoanWithInterestDto
                 {
@@ -526,7 +548,8 @@ public class DashboardController : ControllerBase
                     InterestAmount = CalculateInterest((decimal)(l.LoanType?.InterestRate ?? 0), l.Amount, l.Date, l.ClosedDate ?? l.DueDate),
                     IsOverdue = false,
                     DaysOverdue = 0,
-                    DaysUntilDue = (l.DueDate.Date - today).Days
+                    DaysUntilDue = (l.DueDate.Date - today).Days,
+                    ChequeNumber = l.ChequeNumber
                 }).ToList()
             };
             
@@ -581,6 +604,7 @@ public class DashboardController : ControllerBase
                 DueDate = DateTime.SpecifyKind(parsedDueDate.Date, DateTimeKind.Utc),
                 LoanTypeId = requestDto.LoanTypeId,
                 Amount = requestDto.Amount,
+                Description = requestDto.Description,
                 Status = "Requested"
             };
 
@@ -598,6 +622,7 @@ public class DashboardController : ControllerBase
                 LoanTypeName = "Unknown", // Will be populated when retrieved with includes
                 InterestRate = 0, // Will be populated when retrieved with includes
                 Amount = loanRequest.Amount,
+                Description = loanRequest.Description,
                 Status = loanRequest.Status,
                 RequestDate = loanRequest.Date
             };
@@ -617,7 +642,7 @@ public class DashboardController : ControllerBase
     /// </summary>
     /// <returns>Loan requests filtered by user role</returns>
     [HttpGet("loan-requests")]
-    public async Task<ActionResult<IEnumerable<LoanRequestResponseDto>>> GetLoanRequests()
+    public async Task<ActionResult<IEnumerable<LoanRequestResponseDto>>> GetLoanRequests([FromQuery] int? userId = null)
     {
         try
         {
@@ -642,16 +667,32 @@ public class DashboardController : ControllerBase
                 return BadRequest("Current user not found");
             }
 
+            // Check if current user is admin
+            bool isAdminUser = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(currentUser.UserRole?.Name, "President", StringComparison.OrdinalIgnoreCase) ||
+                              string.Equals(currentUser.UserRole?.Name, "Treasurer", StringComparison.OrdinalIgnoreCase);
+
             IQueryable<LoanRequest> requestsQuery;
 
-            // If user is secretary, return all requests; otherwise, return only user's requests
-            if (string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase))
+            // Build query based on user role and userId parameter
+            if (isAdminUser)
             {
-                _logger.LogInformation("Secretary user - returning all loan requests");
-                requestsQuery = _context.LoanRequests.Include(l => l.User).Include(l => l.LoanType);
+                if (userId.HasValue)
+                {
+                    // Admin user requesting specific user's loan requests
+                    _logger.LogInformation("Admin user ({Role}) - returning loan requests for user {TargetUserId}", currentUser.UserRole?.Name, userId.Value);
+                    requestsQuery = _context.LoanRequests.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == userId.Value);
+                }
+                else
+                {
+                    // Admin user requesting all loan requests (current behavior)
+                    _logger.LogInformation("Admin user ({Role}) - returning all loan requests", currentUser.UserRole?.Name);
+                    requestsQuery = _context.LoanRequests.Include(l => l.User).Include(l => l.LoanType);
+                }
             }
             else
             {
+                // Regular user can only see their own loan requests (current behavior)
                 _logger.LogInformation("Regular user - returning only user's loan requests. User ID: {UserId}", currentUserId);
                 requestsQuery = _context.LoanRequests.Include(l => l.User).Include(l => l.LoanType).Where(l => l.UserId == currentUserId);
             }
@@ -669,10 +710,13 @@ public class DashboardController : ControllerBase
                 LoanTypeName = l.LoanType?.LoanTypeName ?? "Unknown",
                 InterestRate = l.LoanType?.InterestRate ?? 0,
                 Amount = l.Amount,
+                Description = l.Description,
+                ChequeNumber = l.ChequeNumber,
                 Status = l.Status,
                 RequestDate = l.Date,
                 ProcessedDate = l.ProcessedDate,
-                ProcessedByUserName = l.ProcessedByUser?.Name
+                ProcessedByUserName = l.ProcessedByUser?.Name,
+                LoanTerm = l.LoanTerm
             }).ToList();
 
             _logger.LogInformation("Retrieved {Count} loan requests for user {UserId}", response.Count, currentUserId);
@@ -723,8 +767,10 @@ public class DashboardController : ControllerBase
                 return NotFound("Loan request not found");
 
             // Check if user has access to this request
-            bool isSecretary = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase);
-            if (!isSecretary && loanRequest.UserId != currentUserId)
+            bool isAdmin = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(currentUser.UserRole?.Name, "President", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(currentUser.UserRole?.Name, "Treasurer", StringComparison.OrdinalIgnoreCase);
+            if (!isAdmin && loanRequest.UserId != currentUserId)
             {
                 _logger.LogWarning("User {UserId} attempted to access loan request {RequestId} without permission", currentUserId, id);
                 return Forbid();
@@ -741,6 +787,8 @@ public class DashboardController : ControllerBase
                 LoanTypeName = loanRequest.LoanType?.LoanTypeName ?? "Unknown",
                 InterestRate = loanRequest.LoanType?.InterestRate ?? 0,
                 Amount = loanRequest.Amount,
+                Description = loanRequest.Description,
+                ChequeNumber = loanRequest.ChequeNumber,
                 Status = loanRequest.Status,
                 RequestDate = loanRequest.Date,
                 ProcessedDate = loanRequest.ProcessedDate,
@@ -792,8 +840,10 @@ public class DashboardController : ControllerBase
                 return NotFound("Loan request not found");
 
             // Check if user has permission to delete this request
-            bool isSecretary = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase);
-            if (!isSecretary && loanRequest.UserId != currentUserId)
+            bool isAdmin = string.Equals(currentUser.UserRole?.Name, "Secretary", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(currentUser.UserRole?.Name, "President", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(currentUser.UserRole?.Name, "Treasurer", StringComparison.OrdinalIgnoreCase);
+            if (!isAdmin && loanRequest.UserId != currentUserId)
             {
                 _logger.LogWarning("User {UserId} attempted to delete loan request {RequestId} without permission", currentUserId, id);
                 return Forbid();
@@ -819,13 +869,23 @@ public class DashboardController : ControllerBase
     /// <param name="actionDto">Action to perform (accepted/rejected)</param>
     /// <returns>Updated loan request</returns>
     [HttpPut("loan-requests/{id}/action")]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<LoanRequestResponseDto>> ProcessLoanRequest(int id, [FromBody] LoanRequestActionDto actionDto)
     {
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var isSuccess = false;
+        string? errorMessage = null;
+
         try
         {
+            LogOperation("Processing loan request {RequestId} with action: {Action}", id, actionDto.Action);
+            
             if (!ModelState.IsValid)
+            {
+                LogUserActivityAsync("Process", "LoanRequest", id, "Failed to process loan request - Invalid model state", 
+                    actionDto, false, "Invalid model state", stopwatch.ElapsedMilliseconds);
                 return BadRequest(ModelState);
+            }
 
             var loanRequest = await _context.LoanRequests
                 .Include(l => l.User)
@@ -833,44 +893,127 @@ public class DashboardController : ControllerBase
                 .FirstOrDefaultAsync(l => l.Id == id);
 
             if (loanRequest == null)
+            {
+                LogWarning("Loan request with ID {RequestId} not found", id);
+                LogUserActivityAsync("Process", "LoanRequest", id, "Failed to process loan request - Request not found", 
+                    actionDto, false, "Loan request not found", stopwatch.ElapsedMilliseconds);
                 return NotFound("Loan request not found");
+            }
 
             // Validate action
             var action = actionDto.Action;
             if (action != "Accepted" && action != "Rejected")
             {
+                LogWarning("Invalid action for loan request {RequestId}: {Action}", id, action);
+                LogUserActivityAsync("Process", "LoanRequest", id, "Failed to process loan request - Invalid action", 
+                    actionDto, false, "Action must be 'Accepted' or 'Rejected'", stopwatch.ElapsedMilliseconds);
                 return BadRequest("Action must be 'accepted' or 'rejected'");
             }
 
             // Get the current secretary user
-            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
-            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int adminUserId))
+            var currentUserId = GetCurrentUserId();
+            if (!currentUserId.HasValue)
             {
+                LogWarning("Secretary user ID not found in token");
+                LogUserActivityAsync("Process", "LoanRequest", id, "Failed to process loan request - User ID not found in token", 
+                    actionDto, false, "Secretary user ID not found in token", stopwatch.ElapsedMilliseconds);
                 return BadRequest("Secretary user ID not found in token");
             }
 
-            // Update the loan request status
+            var originalStatus = loanRequest.Status;
+            var originalDescription = loanRequest.Description;
+            var originalChequeNumber = loanRequest.ChequeNumber;
+
+            // Update the loan request status and description
             loanRequest.Status = action;
             loanRequest.ProcessedDate = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc);
-            loanRequest.ProcessedByUserId = adminUserId;
+            loanRequest.ProcessedByUserId = currentUserId.Value;
+            
+            // Update description if provided
+            if (!string.IsNullOrEmpty(actionDto.Description))
+            {
+                loanRequest.Description = actionDto.Description;
+            }
+            
+            // Update cheque number if provided
+            if (!string.IsNullOrEmpty(actionDto.ChequeNumber))
+            {
+                loanRequest.ChequeNumber = actionDto.ChequeNumber;
+            }
 
             // If accepted, create a new loan
+            Loan? newLoan = null;
             if (action == "Accepted")
             {
-                var newLoan = new Loan
+                newLoan = new Loan
                 {
                     UserId = loanRequest.UserId,
                     Date = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Utc),
                     DueDate = loanRequest.DueDate,
                     LoanTypeId = loanRequest.LoanTypeId,
                     Amount = loanRequest.Amount,
-                    Status = "active",
-                    ClosedDate = null
+                    LoanTerm = loanRequest.LoanTerm,
+                    Status = "Sanctioned",
+                    ClosedDate = null,
+                    ChequeNumber = actionDto.ChequeNumber
                 };
                 _context.Loans.Add(newLoan);
             }
 
             await _context.SaveChangesAsync();
+
+            // Send email notification
+            bool emailSent = false;
+            try
+            {
+                if (loanRequest.User != null && !string.IsNullOrEmpty(loanRequest.User.Email))
+                {
+                    if (action == "Accepted")
+                    {
+                        // Calculate expected interest
+                        var expectedInterest = CalculateInterest(
+                            (decimal)(loanRequest.LoanType?.InterestRate ?? 0), 
+                            loanRequest.Amount, 
+                            loanRequest.Date, 
+                            loanRequest.DueDate
+                        );
+                        
+                        emailSent = await _emailService.SendLoanRequestApprovedEmailAsync(
+                            loanRequest.User.Email,
+                            loanRequest.User.Name,
+                            loanRequest.Amount,
+                            loanRequest.LoanType?.LoanTypeName ?? "Unknown",
+                            loanRequest.DueDate,
+                            loanRequest.LoanType?.InterestRate ?? 0,
+                            expectedInterest
+                        );
+                    }
+                    else if (action == "Rejected")
+                    {
+                        emailSent = await _emailService.SendLoanRequestRejectedEmailAsync(
+                            loanRequest.User.Email,
+                            loanRequest.User.Name,
+                            loanRequest.Amount,
+                            loanRequest.LoanType?.LoanTypeName ?? "Unknown",
+                            actionDto.Description ?? ""
+                        );
+                    }
+
+                    if (emailSent)
+                    {
+                        LogOperation("Loan request {Action} email sent successfully to {Email}", action, loanRequest.User.Email);
+                    }
+                    else
+                    {
+                        LogWarning("Failed to send loan request {Action} email to {Email}", action, loanRequest.User.Email);
+                    }
+                }
+            }
+            catch (Exception emailEx)
+            {
+                LogError(emailEx, "Error sending loan request {Action} email to {Email}", action, loanRequest.User?.Email);
+                // Don't fail the loan request processing if email fails
+            }
 
             var response = new LoanRequestResponseDto
             {
@@ -883,18 +1026,51 @@ public class DashboardController : ControllerBase
                 LoanTypeName = loanRequest.LoanType?.LoanTypeName ?? "Unknown",
                 InterestRate = loanRequest.LoanType?.InterestRate ?? 0,
                 Amount = loanRequest.Amount,
+                Description = loanRequest.Description,
+                ChequeNumber = loanRequest.ChequeNumber,
                 Status = loanRequest.Status,
                 RequestDate = loanRequest.Date,
                 ProcessedDate = loanRequest.ProcessedDate,
                 ProcessedByUserName = loanRequest.ProcessedByUser?.Name
             };
 
-            _logger.LogInformation("Loan request {RequestId} {Action} by secretary", id, action);
+            LogOperation("Loan request {RequestId} {Action} by secretary", id, action);
+            isSuccess = true;
+            
+            LogUserActivityWithDetailsAsync("Process", "LoanRequest", id, $"Loan request {action.ToLower()} for user {loanRequest.User?.Name}", 
+                new { 
+                    RequestId = id, 
+                    UserId = loanRequest.UserId,
+                    UserName = loanRequest.User?.Name,
+                    Action = action,
+                    Amount = loanRequest.Amount,
+                    LoanType = loanRequest.LoanType?.LoanTypeName,
+                    OriginalStatus = originalStatus,
+                    NewStatus = action,
+                    OriginalDescription = originalDescription,
+                    NewDescription = loanRequest.Description,
+                    OriginalChequeNumber = originalChequeNumber,
+                    NewChequeNumber = loanRequest.ChequeNumber,
+                    ProcessedByUserId = currentUserId.Value,
+                    ProcessedDate = loanRequest.ProcessedDate,
+                    NewLoanCreated = newLoan != null,
+                    NewLoanId = newLoan?.Id,
+                    EmailSent = emailSent,
+                    Changes = new {
+                        StatusChanged = originalStatus != action,
+                        DescriptionChanged = originalDescription != loanRequest.Description,
+                        ChequeNumberChanged = originalChequeNumber != loanRequest.ChequeNumber
+                    }
+                }, isSuccess, errorMessage, stopwatch.ElapsedMilliseconds);
+            
             return Ok(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing loan request {Id}", id);
+            errorMessage = ex.Message;
+            LogError(ex, "Error processing loan request {Id}", id);
+            LogUserActivityAsync("Process", "LoanRequest", id, "Error processing loan request", 
+                actionDto, false, errorMessage, stopwatch.ElapsedMilliseconds);
             return StatusCode(500, "An error occurred while processing the loan request");
         }
     }

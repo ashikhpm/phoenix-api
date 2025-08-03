@@ -24,9 +24,10 @@ public class CreateLoanDto
     [Required]
     public int LoanTerm { get; set; } // Loan term in months
 
-    [Required]
-    [StringLength(50)]
-    public string Status { get; set; } = string.Empty;
+
+
+    [StringLength(100)]
+    public string? ChequeNumber { get; set; }
 }
 
 public class LoanWithInterestDto
@@ -49,6 +50,7 @@ public class LoanWithInterestDto
     public bool IsOverdue { get; set; }
     public int DaysOverdue { get; set; }
     public int DaysUntilDue { get; set; }
+    public string? ChequeNumber { get; set; }
 }
 
 public class LoanRepaymentDto
@@ -82,6 +84,9 @@ public class CreateLoanRequestDto
     
     [Required]
     public string DueDate { get; set; } = string.Empty;
+    
+    [StringLength(500)]
+    public string? Description { get; set; }
 }
 
 public class LoanRequestResponseDto
@@ -96,6 +101,8 @@ public class LoanRequestResponseDto
     public double InterestRate { get; set; }
     public decimal Amount { get; set; }
     public int LoanTerm { get; set; }
+    public string? Description { get; set; }
+    public string? ChequeNumber { get; set; }
     public string Status { get; set; } = string.Empty;
     public DateTime RequestDate { get; set; }
     public DateTime? ProcessedDate { get; set; }
@@ -113,4 +120,10 @@ public class LoanRequestActionDto
 {
     [Required]
     public string Action { get; set; } = string.Empty; // "accepted" or "rejected"
+    
+    [StringLength(100)]
+    public string? ChequeNumber { get; set; }
+    
+    [StringLength(500)]
+    public string? Description { get; set; }
 } 

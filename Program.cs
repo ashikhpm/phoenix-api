@@ -8,11 +8,17 @@ using phoenix_sangam_api.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using phoenix_sangam_api;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        options.JsonSerializerOptions.MaxDepth = 32;
+    });
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
@@ -51,20 +57,65 @@ builder.Services.AddScoped<ILoanService, LoanService>();
 builder.Services.AddScoped<IValidationService, ValidationService>();
 builder.Services.AddScoped<ICacheService, MemoryCacheService>();
 
+
+
+
+
+// Configure email settings
+var emailSettings = builder.Configuration.GetSection("EmailSettings").Get<EmailSettings>();
+if (emailSettings == null)
+{
+    // Fallback to default settings if configuration is missing
+    emailSettings = new EmailSettings
+    {
+        SmtpServer = "smtp.gmail.com",
+        SmtpPort = 587,
+        SmtpUsername = "your-email@gmail.com",
+        SmtpPassword = "your-app-password",
+        SenderName = "Phoenix Sangam",
+        SenderEmail = "noreply@phoenixsangam.com",
+        EnableSsl = true
+    };
+}
+builder.Services.AddSingleton(emailSettings);
+builder.Services.AddScoped<IEmailService, EmailService>();
+
 // Register repositories
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
+// Register user activity service
+builder.Services.AddScoped<IUserActivityService, UserActivityService>();
 
 // Add memory cache
 builder.Services.AddMemoryCache();
 
-// Add CORS policy for localhost:3000
+// Configure CORS from appsettings.json
+var corsSettings = builder.Configuration.GetSection("CorsSettings").Get<CorsSettings>();
+if (corsSettings == null)
+{
+    // Fallback to default settings if configuration is missing
+    corsSettings = new CorsSettings
+    {
+        AllowedOrigins = new[] { "http://localhost:3000" },
+        AllowedMethods = new[] { "GET", "POST", "PUT", "DELETE", "OPTIONS" },
+        AllowedHeaders = new[] { "*" },
+        AllowCredentials = true
+    };
+}
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowLocal3000",
-        policy => policy.WithOrigins("http://localhost:3000")
-                        .AllowAnyHeader()
-                        .AllowAnyMethod()
-                        .AllowCredentials());
+    options.AddPolicy("AllowConfiguredOrigins", policy =>
+    {
+        policy.WithOrigins(corsSettings.AllowedOrigins)
+              .WithHeaders(corsSettings.AllowedHeaders)
+              .WithMethods(corsSettings.AllowedMethods);
+        
+        if (corsSettings.AllowCredentials)
+        {
+            policy.AllowCredentials();
+        }
+    });
 });
 
 // JWT Authentication configuration
@@ -100,11 +151,14 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+// Add static files support for wwwroot
+app.UseStaticFiles();
+
 // Add custom middleware
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseCors("AllowLocal3000");
+app.UseCors("AllowConfiguredOrigins");
 
 app.UseAuthentication();
 app.UseAuthorization();

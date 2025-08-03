@@ -37,7 +37,8 @@ namespace phoenix_sangam_api.Migrations
                     Date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Time = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Description = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
-                    Location = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true)
+                    Location = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    MeetingMinutes = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -68,6 +69,10 @@ namespace phoenix_sangam_api.Migrations
                     Address = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Email = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     Phone = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    AadharNumber = table.Column<string>(type: "character varying(12)", maxLength: 12, nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    InactiveDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
+                    JoiningDate = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     UserRoleId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
@@ -120,6 +125,9 @@ namespace phoenix_sangam_api.Migrations
                     DueDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     LoanTypeId = table.Column<int>(type: "integer", nullable: false),
                     Amount = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    LoanTerm = table.Column<int>(type: "integer", nullable: false),
+                    Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    ChequeNumber = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     Status = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     ProcessedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     ProcessedByUserId = table.Column<int>(type: "integer", nullable: true)
@@ -159,8 +167,10 @@ namespace phoenix_sangam_api.Migrations
                     ClosedDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     LoanTypeId = table.Column<int>(type: "integer", nullable: false),
                     Amount = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    LoanTerm = table.Column<int>(type: "integer", nullable: false),
                     InterestReceived = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
-                    Status = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false)
+                    Status = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    ChequeNumber = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true)
                 },
                 constraints: table =>
                 {
@@ -209,6 +219,41 @@ namespace phoenix_sangam_api.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "UserActivities",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UserId = table.Column<int>(type: "integer", nullable: false),
+                    UserName = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    UserRole = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    Action = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    EntityType = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
+                    EntityId = table.Column<int>(type: "integer", nullable: true),
+                    Description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    Details = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
+                    HttpMethod = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
+                    Endpoint = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    IpAddress = table.Column<string>(type: "character varying(45)", maxLength: 45, nullable: true),
+                    UserAgent = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    StatusCode = table.Column<int>(type: "integer", nullable: false),
+                    IsSuccess = table.Column<bool>(type: "boolean", nullable: false),
+                    ErrorMessage = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Timestamp = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
+                    DurationMs = table.Column<long>(type: "bigint", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_UserActivities", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_UserActivities_Users_UserId",
+                        column: x => x.UserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "UserLogins",
                 columns: table => new
                 {
@@ -244,18 +289,20 @@ namespace phoenix_sangam_api.Migrations
                 values: new object[,]
                 {
                     { 1, "Secretary with full access", "Secretary" },
-                    { 2, "Regular member with limited access", "Member" }
+                    { 2, "President with full access", "President" },
+                    { 3, "Treasurer with full access", "Treasurer" },
+                    { 4, "Regular member with limited access", "Member" }
                 });
 
             migrationBuilder.InsertData(
                 table: "Users",
-                columns: new[] { "Id", "Address", "Email", "Name", "Phone", "UserRoleId" },
-                values: new object[] { 1, "Pattanikoop", "secretary@phenix.com", "Secretary", "8089011871", 1 });
+                columns: new[] { "Id", "AadharNumber", "Address", "Email", "InactiveDate", "IsActive", "JoiningDate", "Name", "Phone", "UserRoleId" },
+                values: new object[] { 1, "", "Pattanikoop", "secretary@phenix.com", null, true, null, "Secretary", "8089011871", 1 });
 
             migrationBuilder.InsertData(
                 table: "UserLogins",
                 columns: new[] { "Id", "Password", "UserId", "Username" },
-                values: new object[] { 1, "password1", 1, "secretary@phenix.com" });
+                values: new object[] { 1, "password1", 1, "secretary@phoenix.com" });
 
             migrationBuilder.CreateIndex(
                 name: "IX_Attendances_MeetingId",
@@ -311,6 +358,26 @@ namespace phoenix_sangam_api.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "IX_UserActivities_Action",
+                table: "UserActivities",
+                column: "Action");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserActivities_EntityType",
+                table: "UserActivities",
+                column: "EntityType");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserActivities_Timestamp",
+                table: "UserActivities",
+                column: "Timestamp");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_UserActivities_UserId",
+                table: "UserActivities",
+                column: "UserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_UserLogins_UserId",
                 table: "UserLogins",
                 column: "UserId");
@@ -353,6 +420,9 @@ namespace phoenix_sangam_api.Migrations
 
             migrationBuilder.DropTable(
                 name: "MeetingPayments");
+
+            migrationBuilder.DropTable(
+                name: "UserActivities");
 
             migrationBuilder.DropTable(
                 name: "UserLogins");

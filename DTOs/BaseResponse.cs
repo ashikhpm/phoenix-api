@@ -90,4 +90,51 @@ public abstract class BaseRequestDto
         
         return !errors.Any();
     }
+}
+
+/// <summary>
+/// Comprehensive meeting summary response DTO
+/// </summary>
+public class ComprehensiveMeetingSummaryDto
+{
+    public int MeetingId { get; set; }
+    public string Description { get; set; } = string.Empty;
+    public DateTime Date { get; set; }
+    public DateTime Time { get; set; }
+    public string Location { get; set; } = string.Empty;
+    public string MeetingMinutes { get; set; } = string.Empty;
+    public List<MeetingAttendeeDto> AttendedUsers { get; set; } = new();
+    public List<MeetingAttendeeDto> AbsentUsers { get; set; } = new();
+    public MeetingAttendanceStatsDto AttendanceStats { get; set; } = new();
+    public DateTime GeneratedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Meeting attendee DTO for comprehensive summary
+/// </summary>
+public class MeetingAttendeeDto
+{
+    public int UserId { get; set; }
+    public string UserName { get; set; } = string.Empty;
+    public string Email { get; set; } = string.Empty;
+    public string Phone { get; set; } = string.Empty;
+    public string Role { get; set; } = string.Empty;
+    public DateTime? JoiningDate { get; set; }
+    public DateTime? InactiveDate { get; set; }
+    public bool IsActive { get; set; }
+    public string AbsenceReason { get; set; } = string.Empty; // For absent users
+}
+
+/// <summary>
+/// Meeting attendance statistics DTO
+/// </summary>
+public class MeetingAttendanceStatsDto
+{
+    public int TotalEligibleUsers { get; set; }
+    public int AttendedCount { get; set; }
+    public int AbsentCount { get; set; }
+    public int InactiveUsersCount { get; set; }
+    public int NotYetJoinedCount { get; set; }
+    public double AttendancePercentage { get; set; }
+    public List<string> AbsenceReasons { get; set; } = new();
 } 

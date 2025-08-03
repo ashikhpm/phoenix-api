@@ -18,6 +18,7 @@ public class UserDbContext : DbContext
     public DbSet<Loan> Loans { get; set; }
     public DbSet<LoanRequest> LoanRequests { get; set; }
     public DbSet<LoanType> LoanTypes { get; set; }
+    public DbSet<UserActivity> UserActivities { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -188,17 +189,55 @@ public class UserDbContext : DbContext
                   .OnDelete(DeleteBehavior.Restrict);
         });
 
+        // Configure UserActivity entity
+        modelBuilder.Entity<UserActivity>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+            entity.Property(e => e.UserId).IsRequired();
+            entity.Property(e => e.UserName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.UserRole).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Action).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.EntityType).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.EntityId);
+            entity.Property(e => e.Description).HasMaxLength(500);
+            entity.Property(e => e.Details).HasMaxLength(2000);
+            entity.Property(e => e.HttpMethod).IsRequired().HasMaxLength(10);
+            entity.Property(e => e.Endpoint).IsRequired().HasMaxLength(200);
+            entity.Property(e => e.IpAddress).HasMaxLength(45);
+            entity.Property(e => e.UserAgent).HasMaxLength(500);
+            entity.Property(e => e.StatusCode).IsRequired();
+            entity.Property(e => e.IsSuccess).IsRequired();
+            entity.Property(e => e.ErrorMessage).HasMaxLength(1000);
+            entity.Property(e => e.Timestamp).IsRequired();
+            entity.Property(e => e.DurationMs).IsRequired();
+            
+            // Foreign key relationship with User
+            entity.HasOne(e => e.User)
+                  .WithMany()
+                  .HasForeignKey(e => e.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+            
+            // Index for performance
+            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.Action);
+            entity.HasIndex(e => e.EntityType);
+        });
+
         // Seed initial data
         modelBuilder.Entity<UserRole>().HasData(
             new UserRole { Id = 1, Name = "Secretary", Description = "Secretary with full access" },
-            new UserRole { Id = 2, Name = "Member", Description = "Regular member with limited access" }
+            new UserRole { Id = 2, Name = "President", Description = "President with full access" },
+            new UserRole { Id = 3, Name = "Treasurer", Description = "Treasurer with full access" },
+            new UserRole { Id = 4, Name = "Member", Description = "Regular member with limited access" }
         );
         modelBuilder.Entity<User>().HasData(
-            new User { Id = 1, Name = "Secretary", Address = "Pattanikoop", Email = "secretary@phenix.com", Phone = "8089011871", UserRoleId = 1 }
+            new User { Id = 1, Name = "Secretary", Address = "Pattanikoop", Email = "secretary@phenix.com", Phone = "8089011871", UserRoleId = 1, IsActive = true }
             
         );
         modelBuilder.Entity<UserLogin>().HasData(
-            new UserLogin { Id = 1, Username = "secretary@phenix.com", Password = "password1", UserId = 1 }
+            new UserLogin { Id = 1, Username = "secretary@phoenix.com", Password = "password1", UserId = 1 }
             
         );
         modelBuilder.Entity<LoanType>().HasData(

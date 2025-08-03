@@ -36,4 +36,7 @@ public class Loan
     [Required]
     [StringLength(50)]
     public string Status { get; set; } = string.Empty;
+
+    [StringLength(100)]
+    public string? ChequeNumber { get; set; }
 } 

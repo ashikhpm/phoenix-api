@@ -12,7 +12,7 @@ using phoenix_sangam_api.Data;
 namespace phoenix_sangam_api.Migrations
 {
     [DbContext(typeof(UserDbContext))]
-    [Migration("20250801124621_InitialMigration")]
+    [Migration("20250803104434_InitialMigration")]
     partial class InitialMigration
     {
         /// <inheritdoc />
@@ -68,6 +68,10 @@ namespace phoenix_sangam_api.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("ChequeNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime?>("ClosedDate")
                         .HasColumnType("timestamp with time zone");
 
@@ -79,6 +83,9 @@ namespace phoenix_sangam_api.Migrations
 
                     b.Property<decimal>("InterestReceived")
                         .HasColumnType("decimal(18,2)");
+
+                    b.Property<int>("LoanTerm")
+                        .HasColumnType("integer");
 
                     b.Property<int>("LoanTypeId")
                         .HasColumnType("integer");
@@ -111,11 +118,22 @@ namespace phoenix_sangam_api.Migrations
                     b.Property<decimal>("Amount")
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<string>("ChequeNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<DateTime>("Date")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<DateTime>("DueDate")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("LoanTerm")
+                        .HasColumnType("integer");
 
                     b.Property<int>("LoanTypeId")
                         .HasColumnType("integer");
@@ -202,6 +220,9 @@ namespace phoenix_sangam_api.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("MeetingMinutes")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Time")
                         .HasColumnType("timestamp with time zone");
 
@@ -253,6 +274,11 @@ namespace phoenix_sangam_api.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("AadharNumber")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
                     b.Property<string>("Address")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -262,6 +288,15 @@ namespace phoenix_sangam_api.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("InactiveDate")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("JoiningDate")
+                        .HasColumnType("timestamp without time zone");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -289,12 +324,103 @@ namespace phoenix_sangam_api.Migrations
                         new
                         {
                             Id = 1,
+                            AadharNumber = "",
                             Address = "Pattanikoop",
                             Email = "secretary@phenix.com",
+                            IsActive = true,
                             Name = "Secretary",
                             Phone = "8089011871",
                             UserRoleId = 1
                         });
+                });
+
+            modelBuilder.Entity("phoenix_sangam_api.Models.UserActivity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Details")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<long>("DurationMs")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Endpoint")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("EntityId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ErrorMessage")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("HttpMethod")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<bool>("IsSuccess")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserName")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("UserRole")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Action");
+
+                    b.HasIndex("EntityType");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("UserActivities");
                 });
 
             modelBuilder.Entity("phoenix_sangam_api.Models.UserLogin", b =>
@@ -333,7 +459,7 @@ namespace phoenix_sangam_api.Migrations
                             Id = 1,
                             Password = "password1",
                             UserId = 1,
-                            Username = "secretary@phenix.com"
+                            Username = "secretary@phoenix.com"
                         });
                 });
 
@@ -371,6 +497,18 @@ namespace phoenix_sangam_api.Migrations
                         new
                         {
                             Id = 2,
+                            Description = "President with full access",
+                            Name = "President"
+                        },
+                        new
+                        {
+                            Id = 3,
+                            Description = "Treasurer with full access",
+                            Name = "Treasurer"
+                        },
+                        new
+                        {
+                            Id = 4,
                             Description = "Regular member with limited access",
                             Name = "Member"
                         });
@@ -468,6 +606,17 @@ namespace phoenix_sangam_api.Migrations
                         .IsRequired();
 
                     b.Navigation("UserRole");
+                });
+
+            modelBuilder.Entity("phoenix_sangam_api.Models.UserActivity", b =>
+                {
+                    b.HasOne("phoenix_sangam_api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("phoenix_sangam_api.Models.UserLogin", b =>

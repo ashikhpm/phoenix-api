@@ -40,6 +40,7 @@ public class MeetingResponseDto
     public DateTime Time { get; set; }
     public string? Description { get; set; }
     public string? Location { get; set; }
+    public string? MeetingMinutes { get; set; }
 }
 
 
@@ -120,15 +121,7 @@ public class LoanDueResponse
     public decimal TotalDueThisWeekAmount => DueThisWeekLoans.Sum(l => l.Amount + l.InterestAmount);
 }
 
-// User DTOs
-public class UserResponseDto
-{
-    public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Address { get; set; } = string.Empty;
-    public string Email { get; set; } = string.Empty;
-    public string Phone { get; set; } = string.Empty;
-}
+
 
 // Attendance DTOs
 public class AttendanceResponseDto
@@ -140,6 +133,19 @@ public class AttendanceResponseDto
     public DateTime CreatedAt { get; set; }
     public UserResponseDto? User { get; set; }
     public MeetingResponseDto? Meeting { get; set; }
+}
+
+// Meeting Attendance Summary DTO
+public class MeetingAttendanceSummaryDto
+{
+    public int MeetingId { get; set; }
+    public MeetingResponseDto? Meeting { get; set; }
+    public List<UserResponseDto> AttendedUsers { get; set; } = new();
+    public List<UserResponseDto> AbsentUsers { get; set; } = new();
+    public int TotalUsers { get; set; }
+    public int AttendedCount { get; set; }
+    public int AbsentCount { get; set; }
+    public double AttendancePercentage { get; set; }
 }
 
 // Meeting Payment DTOs
@@ -154,6 +160,21 @@ public class MeetingPaymentResponseDto
     public DateTime CreatedAt { get; set; }
     public UserResponseDto? User { get; set; }
     public MeetingResponseDto? Meeting { get; set; }
+}
+
+// Meeting Payment Summary DTO
+public class MeetingPaymentSummaryDto
+{
+    public int MeetingId { get; set; }
+    public List<MeetingPaymentUserDto> Users { get; set; } = new();
+}
+
+public class MeetingPaymentUserDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public decimal MainPayment { get; set; }
+    public decimal WeeklyPayment { get; set; }
 }
 
 // Meeting Details DTOs
@@ -188,4 +209,11 @@ public class LoanRequestActionDto
 {
     [Required]
     public string Action { get; set; } = string.Empty; // "accepted" or "rejected"
+}
+
+// User Dropdown DTO
+public class UserDropdownDto
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = string.Empty;
 } 

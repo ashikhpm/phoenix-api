@@ -29,6 +29,12 @@ public class LoanRequest
     [Required]
     public int LoanTerm { get; set; } // Loan term in months
 
+    [StringLength(500)]
+    public string? Description { get; set; }
+
+    [StringLength(100)]
+    public string? ChequeNumber { get; set; }
+
     [Required]
     [StringLength(50)]
     public string Status { get; set; } = string.Empty; // Requested, Accepted, Rejected

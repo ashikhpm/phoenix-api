@@ -18,6 +18,9 @@ public class Meeting
     [StringLength(100)]
     public string? Location { get; set; }
     
+    // Meeting minutes (large text)
+    public string? MeetingMinutes { get; set; }
+    
     // Navigation properties
     public ICollection<Attendance> Attendances { get; set; } = new List<Attendance>();
     public ICollection<MeetingPayment> MeetingPayments { get; set; } = new List<MeetingPayment>();

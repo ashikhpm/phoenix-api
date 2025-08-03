@@ -14,8 +14,8 @@ public class OptimizedLoanController : BaseController
 {
     private readonly ILoanService _loanService;
 
-    public OptimizedLoanController(UserDbContext context, ILogger<OptimizedLoanController> logger, ILoanService loanService) 
-        : base(context, logger)
+    public OptimizedLoanController(UserDbContext context, ILogger<OptimizedLoanController> logger, ILoanService loanService, IUserActivityService userActivityService, IServiceProvider serviceProvider) 
+        : base(context, logger, userActivityService, serviceProvider)
     {
         _loanService = loanService;
     }
@@ -24,7 +24,7 @@ public class OptimizedLoanController : BaseController
     /// Get all loans (Secretary only)
     /// </summary>
     [HttpGet]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<ApiResponse<IEnumerable<LoanWithInterestDto>>>> GetAllLoans()
     {
         try
@@ -43,7 +43,7 @@ public class OptimizedLoanController : BaseController
     /// Get loan by ID (Secretary only)
     /// </summary>
     [HttpGet("{id}")]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<ApiResponse<LoanWithInterestDto>>> GetLoan(int id)
     {
         try
@@ -66,7 +66,7 @@ public class OptimizedLoanController : BaseController
     /// Create new loan (Secretary only)
     /// </summary>
     [HttpPost]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<ApiResponse<LoanWithInterestDto>>> CreateLoan([FromBody] CreateLoanDto loanDto)
     {
         try
@@ -93,7 +93,7 @@ public class OptimizedLoanController : BaseController
     /// Update loan (Secretary only)
     /// </summary>
     [HttpPut("{id}")]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<ApiResponse<LoanWithInterestDto>>> UpdateLoan(int id, [FromBody] CreateLoanDto loanDto)
     {
         try
@@ -120,7 +120,7 @@ public class OptimizedLoanController : BaseController
     /// Delete loan (Secretary only)
     /// </summary>
     [HttpDelete("{id}")]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<ApiResponse<bool>>> DeleteLoan(int id)
     {
         try
@@ -143,7 +143,7 @@ public class OptimizedLoanController : BaseController
     /// Process loan repayment (Secretary only)
     /// </summary>
     [HttpPost("repayment")]
-    [Authorize(Roles = "Secretary")]
+    [Authorize(Roles = "Secretary,President,Treasurer")]
     public async Task<ActionResult<ApiResponse<LoanWithInterestDto>>> LoanRepayment([FromBody] LoanRepaymentDto repaymentDto)
     {
         try
